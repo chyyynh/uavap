@@ -42,12 +42,41 @@ export interface TaskOption {
   helpText?: string
 }
 
-export type LayerType = 'base' | 'landcover' | 'person' | 'vehicle' | 'cone'
+export type LayerType = 'base' | 'ortho' | 'landcover' | 'person' | 'vehicle' | 'cone'
 
 export interface LayerVisibility {
   base: boolean
+  ortho: boolean
   landcover: boolean
   person: boolean
   vehicle: boolean
   cone: boolean
+}
+
+export interface OrthoBounds {
+  north: number
+  south: number
+  east: number
+  west: number
+}
+
+export interface TiffMetadata {
+  filename: string
+  datetime: string | null
+  width: number
+  height: number
+  crs?: string
+}
+
+export interface PdfReportData {
+  title: string
+  datetime: string
+  mapImageBase64: string
+  objects: DetectionObject[]
+  summary: {
+    total: number
+    person: number
+    vehicle: number
+    cone: number
+  }
 }

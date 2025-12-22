@@ -13,6 +13,7 @@ interface UseLayerVisibilityReturn {
 export function useLayerVisibility(): UseLayerVisibilityReturn {
   const [visibility, setVisibility] = React.useState<LayerVisibility>({
     base: true,
+    ortho: true,
     landcover: false,
     person: true,
     vehicle: true,

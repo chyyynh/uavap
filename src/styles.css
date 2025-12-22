@@ -129,18 +129,39 @@
     }
 }
 
-/* UAV Dashboard Theme */
+/* UAV Dashboard Theme - Simplified Flat Design */
 .uav-dashboard {
-  --uav-bg: #0b1220;
-  --uav-panel: #101c33;
-  --uav-stroke: rgba(255, 255, 255, 0.08);
-  --uav-text: rgba(255, 255, 255, 0.92);
-  --uav-muted: rgba(255, 255, 255, 0.65);
-  --uav-muted2: rgba(255, 255, 255, 0.45);
-  --uav-accent: #ff9f2f;
-  --uav-teal: #2dd4bf;
-  --uav-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
-  --uav-radius: 22px;
-  --uav-radius-sm: 14px;
-  --uav-radius-xs: 10px;
+  /* Background layers - solid colors */
+  --uav-bg: #0d1421;
+  --uav-panel: #151d2e;
+  --uav-panel-elevated: #1a2438;
+
+  /* Softer borders */
+  --uav-stroke: rgba(255, 255, 255, 0.06);
+  --uav-stroke-strong: rgba(255, 255, 255, 0.12);
+
+  /* Clear text hierarchy */
+  --uav-text: rgba(255, 255, 255, 0.95);
+  --uav-text-secondary: rgba(255, 255, 255, 0.70);
+  --uav-text-tertiary: rgba(255, 255, 255, 0.45);
+
+  /* Legacy aliases for compatibility */
+  --uav-muted: var(--uav-text-secondary);
+  --uav-muted2: var(--uav-text-tertiary);
+
+  /* Accent colors - slightly desaturated */
+  --uav-accent: #f59e0b;
+  --uav-teal: #14b8a6;
+  --uav-success: #22c55e;
+  --uav-error: #ef4444;
+  --uav-warning: #f59e0b;
+
+  /* Simplified shadows */
+  --uav-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --uav-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+  /* Unified border radius */
+  --uav-radius: 12px;
+  --uav-radius-sm: 8px;
+  --uav-radius-xs: 4px;
 }

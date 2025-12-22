@@ -7,8 +7,10 @@ import {
   CircleMarker,
   LayerGroup,
   ScaleControl,
+  ZoomControl,
   Popup,
   GeoJSON,
+  ImageOverlay,
   useMap,
 } from 'react-leaflet'
 import type { CircleMarker as LeafletCircleMarker, Map as LeafletMap } from 'leaflet'
@@ -17,7 +19,7 @@ import { cn } from '@/lib/utils'
 import { Chip } from '@/components/ui/chip'
 import { LayerPanel } from './LayerPanel'
 import { HoverCard } from './HoverCard'
-import type { DetectionObject, LayerVisibility, ObjectClass } from '@/types/detection'
+import type { DetectionObject, LayerVisibility, ObjectClass, OrthoBounds } from '@/types/detection'
 import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
@@ -33,6 +35,8 @@ interface MapViewProps {
   selectedObjectId: number | null
   onSelectObject: (id: number) => void
   mapRef?: React.MutableRefObject<LeafletMap | null>
+  orthoBounds?: OrthoBounds | null
+  orthoUrl?: string | null
 }
 
 const MARKER_COLORS: Record<ObjectClass, string> = {
@@ -55,6 +59,8 @@ function MapView({
   selectedObjectId,
   onSelectObject,
   mapRef,
+  orthoBounds,
+  orthoUrl,
 }: MapViewProps) {
   const [hoveredObject, setHoveredObject] = React.useState<DetectionObject | null>(null)
   const [hoverPosition, setHoverPosition] = React.useState({ x: 0, y: 0 })
@@ -95,15 +101,29 @@ function MapView({
         center={DEFAULT_MAP_CENTER}
         zoom={DEFAULT_MAP_ZOOM}
         className="h-full w-full"
+        zoomControl={false}
         ref={mapRef as any}
       >
-        <MapController mapRef={mapRef} />
+        <MapController mapRef={mapRef} objects={objects} />
 
         {layerVisibility.base && (
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             maxZoom={20}
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          />
+        )}
+
+        {layerVisibility.ortho && orthoBounds && orthoUrl &&
+         orthoBounds.north !== undefined && orthoBounds.south !== undefined &&
+         orthoBounds.east !== undefined && orthoBounds.west !== undefined && (
+          <ImageOverlay
+            url={orthoUrl}
+            bounds={[
+              [orthoBounds.south, orthoBounds.west],
+              [orthoBounds.north, orthoBounds.east],
+            ]}
+            opacity={0.9}
           />
         )}
 
@@ -164,12 +184,13 @@ function MapView({
           </LayerGroup>
         )}
 
+        <ZoomControl position="bottomright" />
         <ScaleControl position="bottomleft" imperial={false} />
       </MapContainer>
 
-      <div className="pointer-events-none absolute right-3.5 top-3.5 z-[600] flex gap-2.5">
-        <Chip>Project: {projectName}</Chip>
-        <Chip>Status: {status}</Chip>
+      <div className="pointer-events-none absolute right-3 top-3 z-[600] flex gap-2">
+        <Chip variant="muted">Project: {projectName}</Chip>
+        <Chip variant="muted">Status: {status}</Chip>
       </div>
 
       <LayerPanel
@@ -189,16 +210,32 @@ function MapView({
 
 interface MapControllerProps {
   mapRef?: React.MutableRefObject<LeafletMap | null>
+  objects?: DetectionObject[]
 }
 
-function MapController({ mapRef }: MapControllerProps) {
+function MapController({ mapRef, objects }: MapControllerProps) {
   const map = useMap()
+  const hasFittedRef = React.useRef(false)
 
   React.useEffect(() => {
     if (mapRef) {
       mapRef.current = map
     }
   }, [map, mapRef])
+
+  // 當有偵測結果時，自動移動地圖到結果範圍
+  React.useEffect(() => {
+    if (objects && objects.length > 0 && !hasFittedRef.current) {
+      const lats = objects.map((o) => o.lat)
+      const lons = objects.map((o) => o.lon)
+      const bounds: [[number, number], [number, number]] = [
+        [Math.min(...lats), Math.min(...lons)],
+        [Math.max(...lats), Math.max(...lons)],
+      ]
+      map.fitBounds(bounds, { padding: [50, 50] })
+      hasFittedRef.current = true
+    }
+  }, [map, objects])
 
   return null
 }

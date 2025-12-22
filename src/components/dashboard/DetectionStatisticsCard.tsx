@@ -2,7 +2,6 @@
 
 import * as React from 'react'
 
-import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -39,25 +38,22 @@ function DetectionStatisticsCard({
 
   return (
     <DashboardCard
-      title="Detection statistics"
-      helpText="類似 QGIS 屬性表：可篩選類型、點選列同步地圖標記。"
+      title="Detection Statistics"
+      helpText="類似 QGIS 屬性表：可篩選類型、點選列同步地圖標記"
     >
-      <div className="mb-2.5 flex items-center justify-between gap-2.5">
-        <Badge
-          variant="outline"
-          className="rounded-full border-white/10 bg-white/6 px-2.5 py-1.5 text-xs text-white/85"
-        >
-          OBJECTS
-        </Badge>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs text-[var(--uav-text-secondary)]">
+          {filteredObjects.length} objects
+        </span>
         <Select value={filter} onValueChange={(v) => onFilterChange(v as FilterType)}>
-          <SelectTrigger className="min-w-[140px] rounded-full border-white/10 bg-white/6 text-[13px]">
+          <SelectTrigger className="h-7 w-32 border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All types</SelectItem>
-            <SelectItem value="person">person</SelectItem>
-            <SelectItem value="vehicle">vehicle</SelectItem>
-            <SelectItem value="cone">cone</SelectItem>
+            <SelectItem value="person">Person</SelectItem>
+            <SelectItem value="vehicle">Vehicle</SelectItem>
+            <SelectItem value="cone">Cone</SelectItem>
           </SelectContent>
         </Select>
       </div>

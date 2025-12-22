@@ -4,6 +4,7 @@ import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
+import { Toaster } from '@/components/ui/sonner'
 import appCss from '../styles.css?url'
 
 const queryClient = new QueryClient({
@@ -26,7 +27,7 @@ export const Route = createRootRoute({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'TanStack Start Starter',
+        title: 'UAV Dashboard',
       },
     ],
     links: [
@@ -44,6 +45,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
+      <Toaster />
     </QueryClientProvider>
   )
 }

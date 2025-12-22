@@ -1,6 +1,16 @@
 'use client'
 
 import * as React from 'react'
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  type SortingState,
+  type ColumnDef,
+} from '@tanstack/react-table'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { ArrowUp01Icon, ArrowDown01Icon } from '@hugeicons/core-free-icons'
 
 import { cn } from '@/lib/utils'
 import type { DetectionObject } from '@/types/detection'
@@ -16,83 +26,130 @@ function fmt(v: number | null | undefined, decimals = 3): string {
   return v.toFixed(decimals)
 }
 
+const columns: ColumnDef<DetectionObject>[] = [
+  {
+    accessorKey: 'id',
+    header: 'ID',
+    size: 50,
+  },
+  {
+    accessorKey: 'cls',
+    header: 'Class',
+    size: 80,
+  },
+  {
+    accessorKey: 'score',
+    header: 'Score',
+    size: 70,
+    cell: ({ getValue }) => fmt(getValue() as number, 3),
+  },
+  {
+    accessorKey: 'center_x',
+    header: 'Center X',
+    size: 100,
+    cell: ({ getValue }) => fmt(getValue() as number, 5),
+  },
+  {
+    accessorKey: 'center_y',
+    header: 'Center Y',
+    size: 100,
+    cell: ({ getValue }) => fmt(getValue() as number, 4),
+  },
+  {
+    accessorKey: 'area_m2',
+    header: 'Area (m²)',
+    size: 90,
+    cell: ({ getValue }) => fmt(getValue() as number, 2),
+  },
+  {
+    accessorKey: 'elev_z',
+    header: 'Elev Z',
+    size: 80,
+    cell: ({ getValue }) => fmt(getValue() as number, 2),
+  },
+  {
+    accessorKey: 'height_m',
+    header: 'Height',
+    size: 80,
+    cell: ({ getValue }) => fmt(getValue() as number, 2),
+  },
+]
+
 function DetectionTable({
   objects,
   selectedId,
   onSelectRow,
 }: DetectionTableProps) {
+  const [sorting, setSorting] = React.useState<SortingState>([])
+
+  const table = useReactTable({
+    data: objects,
+    columns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
+
   return (
-    <div className="overflow-auto rounded-[var(--uav-radius-sm)] border border-white/8 bg-black/18">
-      <table className="w-full min-w-[780px] border-collapse text-[12.5px]">
+    <div className="overflow-auto rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)]">
+      <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="sticky top-0 z-10 border-b border-white/6 bg-white/4">
-            <th className="w-[46px] whitespace-nowrap px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
-              id
-            </th>
-            <th className="whitespace-nowrap px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
-              class
-            </th>
-            <th className="w-[70px] whitespace-nowrap px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
-              score
-            </th>
-            <th className="w-[120px] whitespace-nowrap px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
-              center_x
-            </th>
-            <th className="w-[120px] whitespace-nowrap px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
-              center_y
-            </th>
-            <th className="w-[90px] whitespace-nowrap px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
-              area_m2
-            </th>
-            <th className="w-[110px] whitespace-nowrap px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
-              aspect_rat
-            </th>
-            <th className="w-[90px] whitespace-nowrap px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
-              elev_z
-            </th>
-            <th className="w-[90px] whitespace-nowrap px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
-              height_m
-            </th>
-          </tr>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id} className="border-b border-[var(--uav-stroke)]">
+              {headerGroup.headers.map((header) => (
+                <th
+                  key={header.id}
+                  className={cn(
+                    'whitespace-nowrap px-2.5 py-2 text-left font-medium text-[var(--uav-text-tertiary)]',
+                    header.column.getCanSort() && 'cursor-pointer select-none hover:text-[var(--uav-text-secondary)]'
+                  )}
+                  style={{ width: header.getSize() }}
+                  onClick={header.column.getToggleSortingHandler()}
+                >
+                  <div className="flex items-center gap-1">
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                    {header.column.getIsSorted() === 'asc' && (
+                      <HugeiconsIcon icon={ArrowUp01Icon} className="size-3" strokeWidth={2} />
+                    )}
+                    {header.column.getIsSorted() === 'desc' && (
+                      <HugeiconsIcon icon={ArrowDown01Icon} className="size-3" strokeWidth={2} />
+                    )}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          ))}
         </thead>
         <tbody>
-          {objects.map((obj) => (
+          {table.getRowModel().rows.map((row) => (
             <tr
-              key={obj.id}
-              onClick={() => onSelectRow(obj.id)}
+              key={row.id}
+              onClick={() => onSelectRow(row.original.id)}
               className={cn(
-                'cursor-pointer border-b border-white/6 transition-colors last:border-b-0',
-                'hover:bg-white/3',
-                selectedId === obj.id && 'bg-[var(--uav-teal)]/8'
+                'cursor-pointer border-b border-[var(--uav-stroke)] transition-colors last:border-b-0',
+                'hover:bg-white/4',
+                selectedId === row.original.id && 'bg-[var(--uav-teal)]/10'
               )}
             >
-              <td className="whitespace-nowrap px-2.5 py-2">{obj.id}</td>
-              <td className="whitespace-nowrap px-2.5 py-2">{obj.cls}</td>
-              <td className="whitespace-nowrap px-2.5 py-2">
-                {fmt(obj.score, 3)}
-              </td>
-              <td className="whitespace-nowrap px-2.5 py-2">
-                {fmt(obj.center_x, 5)}
-              </td>
-              <td className="whitespace-nowrap px-2.5 py-2">
-                {fmt(obj.center_y, 4)}
-              </td>
-              <td className="whitespace-nowrap px-2.5 py-2">
-                {fmt(obj.area_m2, 6)}
-              </td>
-              <td className="whitespace-nowrap px-2.5 py-2">
-                {fmt(obj.aspect_rat, 7)}
-              </td>
-              <td className="whitespace-nowrap px-2.5 py-2">
-                {fmt(obj.elev_z, 2)}
-              </td>
-              <td className="whitespace-nowrap px-2.5 py-2">
-                {fmt(obj.height_m, 2)}
-              </td>
+              {row.getVisibleCells().map((cell) => (
+                <td
+                  key={cell.id}
+                  className="whitespace-nowrap px-2.5 py-2 text-[var(--uav-text)]"
+                >
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
       </table>
+
+      {objects.length === 0 && (
+        <div className="py-8 text-center text-sm text-[var(--uav-text-tertiary)]">
+          No detection results
+        </div>
+      )}
     </div>
   )
 }

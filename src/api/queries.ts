@@ -1,26 +1,47 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { DetectionObject, Project, GpuStatus } from '@/types/detection'
+import type { DetectionObject, Project, GpuStatus, OrthoBounds, TiffMetadata } from '@/types/detection'
 import { MOCK_OBJECTS, MOCK_PROJECTS, MOCK_GPU_STATUS } from './mock-data'
+import { notify } from '@/components/ui/sonner'
 
 // ============================================
 // API 設定
 // ============================================
 
+const STORAGE_KEY = 'uav_api_url'
+
 /**
- * API 基礎網址
- *
- * 開發模式：使用 mock 資料（設為 null）
- * 生產模式：填入 Cloudflare Tunnel 產生的網址
- *
- * 範例：'https://xxx-xxx-xxx.trycloudflare.com'
+ * 取得 API 基礎網址（從 localStorage）
  */
-const API_BASE_URL: string | null = 'https://wrap-twelve-howto-fate.trycloudflare.com'
+function getApiBaseUrl(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(STORAGE_KEY) || null
+}
+
+/**
+ * 設定 API 基礎網址
+ */
+export function setApiBaseUrl(url: string | null): void {
+  if (typeof window === 'undefined') return
+  if (url && url.trim()) {
+    localStorage.setItem(STORAGE_KEY, url.trim().replace(/\/$/, ''))
+  } else {
+    localStorage.removeItem(STORAGE_KEY)
+  }
+}
+
+/**
+ * 取得目前儲存的 API URL
+ */
+export function getStoredApiUrl(): string {
+  return getApiBaseUrl() || ''
+}
 
 /**
  * 是否使用 mock 資料
- * 當 API_BASE_URL 為 null 時，自動使用 mock 資料
  */
-const USE_MOCK = API_BASE_URL === null
+function useMock(): boolean {
+  return !getApiBaseUrl()
+}
 
 // ============================================
 // Query Keys（快取鍵）
@@ -44,6 +65,11 @@ export const processingKeys = {
   byJob: (jobId: string) => [...processingKeys.all, jobId] as const,
 }
 
+export const orthoKeys = {
+  bounds: ['ortho', 'bounds'] as const,
+  metadata: ['ortho', 'metadata'] as const,
+}
+
 // ============================================
 // API 請求函式
 // ============================================
@@ -54,9 +80,10 @@ export const processingKeys = {
  */
 async function apiRequest<T>(
   endpoint: string,
-  options?: RequestInit
+  options?: RequestInit,
 ): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`
+  const baseUrl = getApiBaseUrl()
+  const url = `${baseUrl}${endpoint}`
 
   const response = await fetch(url, {
     ...options,
@@ -80,7 +107,7 @@ async function apiRequest<T>(
  */
 async function fetchDetections(projectId: string): Promise<DetectionObject[]> {
   // 使用 mock 資料
-  if (USE_MOCK) {
+  if (useMock()) {
     await new Promise((resolve) => setTimeout(resolve, 100))
     return MOCK_OBJECTS
   }
@@ -93,7 +120,7 @@ async function fetchDetections(projectId: string): Promise<DetectionObject[]> {
  * 取得專案列表
  */
 async function fetchProjects(): Promise<Project[]> {
-  if (USE_MOCK) {
+  if (useMock()) {
     await new Promise((resolve) => setTimeout(resolve, 50))
     return MOCK_PROJECTS
   }
@@ -105,12 +132,66 @@ async function fetchProjects(): Promise<Project[]> {
  * 取得 GPU 狀態
  */
 async function fetchGpuStatus(): Promise<GpuStatus> {
-  if (USE_MOCK) {
+  if (useMock()) {
     await new Promise((resolve) => setTimeout(resolve, 50))
     return MOCK_GPU_STATUS
   }
 
   return apiRequest<GpuStatus>('/api/gpu/status')
+}
+
+/**
+ * 取得正射影像邊界
+ */
+async function fetchOrthoBounds(): Promise<OrthoBounds | null> {
+  if (useMock()) {
+    return null
+  }
+
+  try {
+    const result = await apiRequest<OrthoBounds & { error?: string }>('/api/ortho/bounds')
+    // 檢查是否為有效的邊界資料
+    if (result.error || result.north === undefined || result.south === undefined) {
+      return null
+    }
+    return result
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 取得正射影像 URL
+ */
+export function getOrthoImageUrl(): string | null {
+  const baseUrl = getApiBaseUrl()
+  if (!baseUrl) return null
+  return `${baseUrl}/api/ortho/image`
+}
+
+/**
+ * 取得 TIFF 元資料
+ */
+async function fetchTiffMetadata(): Promise<TiffMetadata | null> {
+  if (useMock()) {
+    return {
+      filename: 'demo_ortho.tif',
+      datetime: new Date().toISOString(),
+      width: 4096,
+      height: 3072,
+      crs: 'EPSG:4326',
+    }
+  }
+
+  try {
+    const result = await apiRequest<TiffMetadata & { error?: string }>('/api/ortho/metadata')
+    if (result.error) {
+      return null
+    }
+    return result
+  } catch {
+    return null
+  }
 }
 
 // ============================================
@@ -152,12 +233,43 @@ export interface ProcessingStatusResponse {
 }
 
 /**
+ * 上傳影像
+ */
+async function uploadImage(
+  file: File,
+): Promise<{ filename: string; message: string }> {
+  if (useMock()) {
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    return {
+      filename: file.name,
+      message: '模擬上傳成功',
+    }
+  }
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/upload`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`上傳失敗 (${response.status}): ${error}`)
+  }
+
+  return response.json()
+}
+
+/**
  * 啟動處理任務
  */
 async function startProcessing(
-  request: ProcessingRequest
+  request: ProcessingRequest,
 ): Promise<ProcessingResponse> {
-  if (USE_MOCK) {
+  if (useMock()) {
     await new Promise((resolve) => setTimeout(resolve, 200))
     return {
       job_id: `mock_job_${Date.now()}`,
@@ -176,9 +288,9 @@ async function startProcessing(
  * 取得處理任務狀態
  */
 async function fetchProcessingStatus(
-  jobId: string
+  jobId: string,
 ): Promise<ProcessingStatusResponse> {
-  if (USE_MOCK) {
+  if (useMock()) {
     await new Promise((resolve) => setTimeout(resolve, 100))
     return {
       job_id: jobId,
@@ -229,18 +341,56 @@ export function useGpuStatus() {
 }
 
 /**
- * 啟動處理任務 Hook
+ * 取得正射影像邊界 Hook
  */
-export function useStartProcessing() {
+export function useOrthoBounds() {
+  return useQuery({
+    queryKey: orthoKeys.bounds,
+    queryFn: fetchOrthoBounds,
+    enabled: !useMock(),
+  })
+}
+
+/**
+ * 取得 TIFF 元資料 Hook
+ */
+export function useTiffMetadata() {
+  return useQuery({
+    queryKey: orthoKeys.metadata,
+    queryFn: fetchTiffMetadata,
+  })
+}
+
+/**
+ * 上傳影像 Hook
+ */
+export function useUploadImage() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: startProcessing,
+    mutationFn: uploadImage,
     onSuccess: (data) => {
-      console.log('處理任務已啟動:', data.job_id)
+      notify.success('Upload successful', data.filename)
+      queryClient.invalidateQueries({ queryKey: projectKeys.all })
+      queryClient.invalidateQueries({ queryKey: orthoKeys.bounds })
     },
     onError: (error) => {
-      console.error('啟動處理任務失敗:', error)
+      notify.error('Upload failed', error instanceof Error ? error.message : 'Unknown error')
+    },
+  })
+}
+
+/**
+ * 啟動處理任務 Hook
+ */
+export function useStartProcessing() {
+  return useMutation({
+    mutationFn: startProcessing,
+    onSuccess: (data) => {
+      notify.info('Processing started', `Job ID: ${data.job_id}`)
+    },
+    onError: (error) => {
+      notify.error('Processing failed', error instanceof Error ? error.message : 'Unknown error')
     },
   })
 }
@@ -272,10 +422,11 @@ export function useProcessingStatus(jobId: string | null) {
  * 檢查 API 是否可用
  */
 export async function checkApiHealth(): Promise<boolean> {
-  if (USE_MOCK) return true
+  if (useMock()) return true
 
   try {
-    const response = await fetch(`${API_BASE_URL}/`)
+    const baseUrl = getApiBaseUrl()
+    const response = await fetch(`${baseUrl}/`)
     return response.ok
   } catch {
     return false
@@ -287,7 +438,7 @@ export async function checkApiHealth(): Promise<boolean> {
  */
 export function getApiConfig() {
   return {
-    baseUrl: API_BASE_URL,
-    useMock: USE_MOCK,
+    baseUrl: getApiBaseUrl(),
+    useMock: useMock(),
   }
 }

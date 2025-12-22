@@ -2,97 +2,86 @@
 
 import * as React from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { ArrowDown01Icon, InformationCircleIcon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
 
 import { cn } from '@/lib/utils'
-import { IconButton } from '@/components/ui/icon-button'
+import { Progress } from '@/components/ui/progress'
 import {
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
 } from '@/components/ui/collapsible'
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from '@/components/ui/tooltip'
 import type { ProcessingStep } from '@/types/detection'
 
 interface ProcessingSectionProps {
   steps: ProcessingStep[]
   progress: number
   elapsed: number
+  currentStep?: string
+  isRunning?: boolean
 }
 
 function ProcessingSection({
   steps,
   progress,
   elapsed,
+  currentStep,
+  isRunning,
 }: ProcessingSectionProps) {
-  const [open, setOpen] = React.useState(true)
+  const [open, setOpen] = React.useState(false)
 
   return (
-    <div className="mt-2.5 border-t border-white/6 pt-3">
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="flex w-full cursor-pointer select-none items-center justify-between gap-2.5 rounded-[var(--uav-radius-sm)] border border-white/6 bg-black/12 px-2.5 py-2">
-          <div className="flex items-center gap-2.5">
-            <span className="text-base text-white/88">Processing</span>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <IconButton
-                    variant="help"
-                    size="sm"
-                    aria-label="Help"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <HugeiconsIcon
-                      icon={InformationCircleIcon}
-                      strokeWidth={2}
-                      className="text-white/88"
-                    />
-                  </IconButton>
-                }
-              />
-              <TooltipContent>
-                顯示目前步驟、進度與耗時（示意）。可串接後端 log / websocket。
-              </TooltipContent>
-            </Tooltip>
+    <div className="mt-3 border-t border-[var(--uav-stroke)] pt-3">
+      {/* Progress Bar - Always visible */}
+      <div className="mb-3">
+        <div className="mb-1.5 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-[var(--uav-text-secondary)]">
+              Progress: <span className="text-[var(--uav-text)]">{progress}%</span>
+            </span>
+            {isRunning && currentStep && (
+              <span className="animate-pulse rounded-[var(--uav-radius-xs)] bg-[var(--uav-teal)]/15 px-2 py-0.5 text-xs text-[var(--uav-teal)]">
+                {currentStep}
+              </span>
+            )}
           </div>
-          <IconButton variant="default" size="sm" aria-label="Toggle">
-            <HugeiconsIcon
-              icon={ArrowDown01Icon}
-              strokeWidth={2}
-              className={cn(
-                'text-white/88 transition-transform',
-                !open && '-rotate-90'
-              )}
-            />
-          </IconButton>
+          <span className="text-[var(--uav-text-secondary)]">
+            Elapsed: <span className="text-[var(--uav-text)]">{elapsed.toFixed(1)}s</span>
+          </span>
+        </div>
+        <Progress value={progress} />
+      </div>
+
+      {/* Steps Table - Collapsible */}
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger className="flex w-full cursor-pointer select-none items-center justify-between gap-2 rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] px-3 py-2">
+          <span className="text-sm font-medium text-[var(--uav-text)]">Steps</span>
+          <HugeiconsIcon
+            icon={ArrowDown01Icon}
+            strokeWidth={2}
+            className={cn(
+              'size-4 text-[var(--uav-text-secondary)] transition-transform duration-200',
+              !open && '-rotate-90'
+            )}
+          />
         </CollapsibleTrigger>
 
-        <CollapsibleContent className="pt-2.5">
-          <p className="mb-2.5 text-[13px] text-[var(--uav-muted)]">
-            Progress: <span className="text-[var(--uav-text)]">{progress}%</span>{' '}
-            • Elapsed:{' '}
-            <span className="text-[var(--uav-text)]">{elapsed.toFixed(1)}s</span>
-          </p>
-
-          <div className="overflow-hidden rounded-[var(--uav-radius-sm)] border border-white/8 bg-black/18">
-            <table className="w-full border-collapse text-[12.5px]">
+        <CollapsibleContent className="pt-2">
+          <div className="overflow-hidden rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)]">
+            <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="border-b border-white/6 bg-white/4">
-                  <th className="w-9 px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
+                <tr className="border-b border-[var(--uav-stroke)]">
+                  <th className="w-8 px-2.5 py-2 text-left font-medium text-[var(--uav-text-tertiary)]">
                     #
                   </th>
-                  <th className="px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
+                  <th className="px-2.5 py-2 text-left font-medium text-[var(--uav-text-tertiary)]">
                     Step
                   </th>
-                  <th className="w-[120px] px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
+                  <th className="w-24 px-2.5 py-2 text-left font-medium text-[var(--uav-text-tertiary)]">
                     Status
                   </th>
-                  <th className="w-[90px] px-2.5 py-2 text-left font-normal text-[var(--uav-muted)]">
-                    Elapsed
+                  <th className="w-20 px-2.5 py-2 text-left font-medium text-[var(--uav-text-tertiary)]">
+                    Time
                   </th>
                 </tr>
               </thead>
@@ -100,26 +89,15 @@ function ProcessingSection({
                 {steps.map((step) => (
                   <tr
                     key={step.id}
-                    className="border-b border-white/6 last:border-b-0"
+                    className="border-b border-[var(--uav-stroke)] last:border-b-0"
                   >
-                    <td className="px-2.5 py-2">{step.id}</td>
-                    <td className="px-2.5 py-2">{step.name}</td>
+                    <td className="px-2.5 py-2 text-[var(--uav-text-secondary)]">{step.id}</td>
+                    <td className="px-2.5 py-2 text-[var(--uav-text)]">{step.name}</td>
                     <td className="px-2.5 py-2">
-                      <span
-                        className={cn(
-                          step.status === 'running' && 'text-[var(--uav-teal)]',
-                          step.status === 'done' && 'text-green-400',
-                          step.status === 'error' && 'text-red-400'
-                        )}
-                      >
-                        {step.status.charAt(0).toUpperCase() +
-                          step.status.slice(1)}
-                      </span>
+                      <StatusBadge status={step.status} />
                     </td>
-                    <td className="px-2.5 py-2">
-                      {step.elapsed != null
-                        ? `${step.elapsed.toFixed(2)}s`
-                        : '—'}
+                    <td className="px-2.5 py-2 text-[var(--uav-text-secondary)]">
+                      {step.elapsed != null ? `${step.elapsed.toFixed(2)}s` : '—'}
                     </td>
                   </tr>
                 ))}
@@ -129,6 +107,21 @@ function ProcessingSection({
         </CollapsibleContent>
       </Collapsible>
     </div>
+  )
+}
+
+function StatusBadge({ status }: { status: ProcessingStep['status'] }) {
+  const styles = {
+    pending: 'text-[var(--uav-text-tertiary)]',
+    running: 'text-[var(--uav-teal)]',
+    done: 'text-[var(--uav-success)]',
+    error: 'text-[var(--uav-error)]',
+  }
+
+  return (
+    <span className={cn('capitalize', styles[status])}>
+      {status}
+    </span>
   )
 }
 

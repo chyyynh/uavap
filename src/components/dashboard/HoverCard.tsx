@@ -13,26 +13,35 @@ function fmt(v: number | null | undefined, decimals = 2): string {
   return v.toFixed(decimals)
 }
 
+const classColors: Record<string, string> = {
+  person: 'text-blue-400',
+  vehicle: 'text-green-400',
+  cone: 'text-orange-400',
+}
+
 function HoverCard({ object, position }: HoverCardProps) {
   return (
     <div
       className={cn(
-        'pointer-events-none absolute z-[900] min-w-[220px] max-w-[280px] rounded-[var(--uav-radius-sm)] border border-white/10 p-2.5 text-[12.5px] shadow-[0_18px_40px_rgba(0,0,0,0.45)]',
-        'bg-[rgba(10,16,28,0.94)]'
+        'pointer-events-none absolute z-[900] min-w-48 rounded-[var(--uav-radius-sm)]',
+        'border border-[var(--uav-stroke)] bg-[var(--uav-panel)] p-2.5 text-xs',
+        'shadow-[var(--uav-shadow-md)]'
       )}
       style={{
         left: position.x,
         top: position.y,
       }}
     >
-      <div className="mb-1.5 font-semibold text-white/92">{object.cls}</div>
-      <HoverRow label="ID" value={String(object.id)} />
-      <HoverRow label="Score" value={fmt(object.score, 3)} />
-      <HoverRow label="Area" value={`${fmt(object.area_m2, 3)} m²`} />
-      <HoverRow
-        label="Elev / Height"
-        value={`${fmt(object.elev_z, 2)} m / ${fmt(object.height_m, 2)} m`}
-      />
+      <div className={cn('mb-2 font-semibold capitalize', classColors[object.cls] || 'text-[var(--uav-text)]')}>
+        {object.cls}
+      </div>
+      <div className="space-y-1">
+        <HoverRow label="ID" value={String(object.id)} />
+        <HoverRow label="Score" value={fmt(object.score, 3)} />
+        <HoverRow label="Area" value={`${fmt(object.area_m2, 2)} m²`} />
+        <HoverRow label="Elevation" value={`${fmt(object.elev_z, 2)} m`} />
+        <HoverRow label="Height" value={`${fmt(object.height_m, 2)} m`} />
+      </div>
     </div>
   )
 }
@@ -44,9 +53,9 @@ interface HoverRowProps {
 
 function HoverRow({ label, value }: HoverRowProps) {
   return (
-    <div className="flex justify-between gap-2.5 py-0.5">
-      <span className="text-white/55">{label}</span>
-      <span className="text-white/88">{value}</span>
+    <div className="flex justify-between gap-4">
+      <span className="text-[var(--uav-text-tertiary)]">{label}</span>
+      <span className="text-[var(--uav-text)]">{value}</span>
     </div>
   )
 }

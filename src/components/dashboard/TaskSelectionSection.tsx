@@ -2,10 +2,16 @@
 
 import * as React from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { ArrowDown01Icon, InformationCircleIcon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDown01Icon,
+  InformationCircleIcon,
+  UserIcon,
+  Car01Icon,
+  Cone01Icon,
+} from '@hugeicons/core-free-icons'
 
 import { cn } from '@/lib/utils'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
 import { IconButton } from '@/components/ui/icon-button'
 import {
   Collapsible,
@@ -17,216 +23,126 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from '@/components/ui/tooltip'
+import { useTaskOptionsContext } from '@/contexts/TaskOptionsContext'
 
-interface TaskOption {
-  id: string
-  label: string
-  helpText?: string
-  indent?: boolean
-}
+const DETECTION_TARGETS = [
+  { key: 'personEnabled' as const, label: '人', icon: UserIcon },
+  { key: 'vehicleEnabled' as const, label: '車輛', icon: Car01Icon },
+  { key: 'coneEnabled' as const, label: '交通錐', icon: Cone01Icon },
+]
 
-interface TaskSelectionSectionProps {
-  objectsEnabled: boolean
-  onObjectsChange: (checked: boolean) => void
-  personEnabled: boolean
-  onPersonChange: (checked: boolean) => void
-  vehicleEnabled: boolean
-  onVehicleChange: (checked: boolean) => void
-  coneEnabled: boolean
-  onConeChange: (checked: boolean) => void
-  geoEnabled: boolean
-  onGeoChange: (checked: boolean) => void
-  changeEnabled: boolean
-  onChangeChange: (checked: boolean) => void
-  statsEnabled: boolean
-  onStatsChange: (checked: boolean) => void
-  pdfEnabled: boolean
-  onPdfChange: (checked: boolean) => void
-  gpkgEnabled: boolean
-  onGpkgChange: (checked: boolean) => void
-}
+const ANALYSIS_OPTIONS = [
+  {
+    key: 'geoEnabled' as const,
+    label: '高程與高度',
+    helpText: '在屬性表新增 elev_z（中心點高程）、height_m（相對地面高度）',
+    subtitle: '點雲 / DSM',
+  },
+  {
+    key: 'changeEnabled' as const,
+    label: '地表變化偵測',
+    subtitle: '多期比對',
+  },
+]
 
-function TaskSelectionSection({
-  objectsEnabled,
-  onObjectsChange,
-  personEnabled,
-  onPersonChange,
-  vehicleEnabled,
-  onVehicleChange,
-  coneEnabled,
-  onConeChange,
-  geoEnabled,
-  onGeoChange,
-  changeEnabled,
-  onChangeChange,
-  statsEnabled,
-  onStatsChange,
-  pdfEnabled,
-  onPdfChange,
-  gpkgEnabled,
-  onGpkgChange,
-}: TaskSelectionSectionProps) {
+function TaskSelectionSection() {
   const [open, setOpen] = React.useState(true)
+  const { options, setOption } = useTaskOptionsContext()
 
   return (
-    <div className="mt-2.5 border-t border-white/6 pt-3">
+    <div className="border-t border-[var(--uav-stroke)] pt-3">
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="flex w-full cursor-pointer select-none items-center justify-between gap-2.5 rounded-[var(--uav-radius-sm)] border border-white/6 bg-black/12 px-2.5 py-2">
-          <div className="flex items-center gap-2.5">
-            <span className="text-base text-white/88">Task Selection</span>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <IconButton
-                    variant="help"
-                    size="sm"
-                    aria-label="Help"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <HugeiconsIcon
-                      icon={InformationCircleIcon}
-                      strokeWidth={2}
-                      className="text-white/88"
-                    />
-                  </IconButton>
-                }
-              />
-              <TooltipContent>
-                勾選想要的分析項目與輸出內容。進階說明可在地圖圖層或報表查看。
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          <IconButton variant="default" size="sm" aria-label="Toggle">
-            <HugeiconsIcon
-              icon={ArrowDown01Icon}
-              strokeWidth={2}
-              className={cn(
-                'text-white/88 transition-transform',
-                !open && '-rotate-90'
-              )}
-            />
-          </IconButton>
+        <CollapsibleTrigger className="flex w-full cursor-pointer select-none items-center justify-between gap-2 rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] px-3 py-2">
+          <span className="text-sm font-medium text-[var(--uav-text)]">Task Selection</span>
+          <HugeiconsIcon
+            icon={ArrowDown01Icon}
+            strokeWidth={2}
+            className={cn(
+              'size-4 text-[var(--uav-text-secondary)] transition-transform duration-200',
+              !open && '-rotate-90'
+            )}
+          />
         </CollapsibleTrigger>
 
-        <CollapsibleContent className="px-2 pt-2.5">
-          <TaskRow
-            label="場域中的物件"
-            helpText="啟用物件偵測與屬性表輸出（bbox/center/score/class…）。"
-            checked={objectsEnabled}
-            onCheckedChange={onObjectsChange}
-          />
-          <TaskRow
-            label="人"
-            checked={personEnabled}
-            onCheckedChange={onPersonChange}
-            disabled={!objectsEnabled}
-            indent
-          />
-          <TaskRow
-            label="車輛"
-            checked={vehicleEnabled}
-            onCheckedChange={onVehicleChange}
-            disabled={!objectsEnabled}
-            indent
-          />
-          <TaskRow
-            label="交通角錐"
-            checked={coneEnabled}
-            onCheckedChange={onConeChange}
-            disabled={!objectsEnabled}
-            indent
-          />
+        <CollapsibleContent className="pt-3">
+          <div className="rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] p-3">
+            {/* Detection Targets - Chips */}
+            <div className="mb-4">
+              <span className="mb-2 block text-xs text-[var(--uav-text-tertiary)]">
+                偵測目標
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {DETECTION_TARGETS.map((target) => (
+                  <button
+                    key={target.key}
+                    type="button"
+                    onClick={() => setOption(target.key, !options[target.key])}
+                    className={cn(
+                      'flex items-center gap-2 rounded-[var(--uav-radius-sm)] border px-3 py-2 text-sm transition-all',
+                      options[target.key]
+                        ? 'border-[var(--uav-teal)]/40 bg-[var(--uav-teal)]/10 text-[var(--uav-teal)]'
+                        : 'border-[var(--uav-stroke)] bg-transparent text-[var(--uav-text-secondary)] hover:border-[var(--uav-text-tertiary)]'
+                    )}
+                  >
+                    <HugeiconsIcon
+                      icon={target.icon}
+                      strokeWidth={1.5}
+                      className="size-4"
+                    />
+                    {target.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-          <TaskRow
-            label="加算高程與高度（點雲/DSM）"
-            helpText="在屬性表新增：elev_z（中心點高程）、height_m（相對地面高度）。"
-            checked={geoEnabled}
-            onCheckedChange={onGeoChange}
-            className="mt-1.5"
-          />
-          <TaskRow
-            label="地表/地形變化（多期）"
-            checked={changeEnabled}
-            onCheckedChange={onChangeChange}
-          />
-
-          <TaskRow
-            label="統計摘要"
-            checked={statsEnabled}
-            onCheckedChange={onStatsChange}
-            className="mt-1.5"
-          />
-          <TaskRow
-            label="報表（PDF）"
-            checked={pdfEnabled}
-            onCheckedChange={onPdfChange}
-          />
-          <TaskRow
-            label="GIS 圖層（GeoPackage）"
-            checked={gpkgEnabled}
-            onCheckedChange={onGpkgChange}
-          />
+            {/* Analysis Options - Switches */}
+            <div className="space-y-1 border-t border-[var(--uav-stroke)] pt-3">
+              {ANALYSIS_OPTIONS.map((option) => (
+                <div
+                  key={option.key}
+                  className="group flex items-center justify-between gap-3 rounded-[var(--uav-radius-xs)] px-1 py-1.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-[var(--uav-text)]">
+                      {option.label}
+                      {option.subtitle && (
+                        <span className="ml-1.5 text-xs text-[var(--uav-text-tertiary)]">
+                          {option.subtitle}
+                        </span>
+                      )}
+                    </span>
+                    {option.helpText && (
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <IconButton
+                              variant="help"
+                              size="sm"
+                              aria-label="Help"
+                              className="opacity-0 transition-opacity group-hover:opacity-100"
+                            >
+                              <HugeiconsIcon
+                                icon={InformationCircleIcon}
+                                strokeWidth={2}
+                                className="size-3"
+                              />
+                            </IconButton>
+                          }
+                        />
+                        <TooltipContent>{option.helpText}</TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
+                  <Switch
+                    checked={options[option.key]}
+                    onCheckedChange={(v) => setOption(option.key, v)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
         </CollapsibleContent>
       </Collapsible>
-    </div>
-  )
-}
-
-interface TaskRowProps {
-  label: string
-  helpText?: string
-  checked: boolean
-  onCheckedChange: (checked: boolean) => void
-  disabled?: boolean
-  indent?: boolean
-  className?: string
-}
-
-function TaskRow({
-  label,
-  helpText,
-  checked,
-  onCheckedChange,
-  disabled,
-  indent,
-  className,
-}: TaskRowProps) {
-  return (
-    <div
-      className={cn(
-        'flex items-center justify-between gap-2.5 py-2',
-        indent && 'pl-7',
-        className
-      )}
-    >
-      <div className="flex min-w-0 flex-1 items-start gap-2.5">
-        <Checkbox
-          variant="teal"
-          checked={checked}
-          onCheckedChange={onCheckedChange}
-          disabled={disabled}
-          className="mt-0.5"
-        />
-        <div className="flex items-center gap-2.5">
-          <span className="text-base">{label}</span>
-          {helpText && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <IconButton variant="help" size="sm" aria-label="Help">
-                    <HugeiconsIcon
-                      icon={InformationCircleIcon}
-                      strokeWidth={2}
-                      className="text-white/88"
-                    />
-                  </IconButton>
-                }
-              />
-              <TooltipContent>{helpText}</TooltipContent>
-            </Tooltip>
-          )}
-        </div>
-      </div>
     </div>
   )
 }

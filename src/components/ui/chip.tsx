@@ -4,14 +4,14 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const chipVariants = cva(
-  'inline-flex items-center gap-2 rounded-full px-3 py-2.5 text-[13px] backdrop-blur-[10px]',
+  'inline-flex items-center gap-1.5 rounded-[var(--uav-radius-xs)] px-2.5 py-1.5 text-xs',
   {
     variants: {
       variant: {
         default:
-          'border border-[var(--uav-stroke)] bg-[var(--uav-panel)]/75 text-[var(--uav-text)]',
-        status:
-          'border border-[var(--uav-stroke)] bg-[var(--uav-panel)]/75 text-[var(--uav-text)]',
+          'border border-[var(--uav-stroke)] bg-[var(--uav-panel)] text-[var(--uav-text)]',
+        muted:
+          'border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] text-[var(--uav-text-secondary)]',
       },
     },
     defaultVariants: {
