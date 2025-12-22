@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button'
 import {
   useProjects,
   useGpuStatus,
-  useUploadImage,
+  useUploadFile,
   setApiBaseUrl,
   getStoredApiUrl,
 } from '@/api/queries'
@@ -36,7 +36,7 @@ function Topbar({ className, onProjectChange, selectedProjectId }: TopbarProps) 
   const queryClient = useQueryClient()
   const { data: projects = [] } = useProjects()
   const { data: gpuStatus } = useGpuStatus()
-  const uploadMutation = useUploadImage()
+  const uploadMutation = useUploadFile()
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const [apiUrl, setApiUrl] = React.useState('')
@@ -65,10 +65,6 @@ function Topbar({ className, onProjectChange, selectedProjectId }: TopbarProps) 
     queryClient.invalidateQueries()
   }
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click()
-  }
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -77,6 +73,10 @@ function Topbar({ className, onProjectChange, selectedProjectId }: TopbarProps) 
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
+  }
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click()
   }
 
   return (
@@ -145,19 +145,19 @@ function Topbar({ className, onProjectChange, selectedProjectId }: TopbarProps) 
           )}
         </div>
 
-        {/* Upload */}
+        {/* Upload - 支援 TIFF, DSM, LAZ */}
         <input
           ref={fileInputRef}
           type="file"
-          accept=".tif,.tiff,.jpg,.jpeg,.png"
+          accept=".tif,.tiff,.jpg,.jpeg,.png,.dsm,.laz,.las"
           onChange={handleFileChange}
           className="hidden"
         />
         <Button
           variant="outline"
           size="sm"
-          onClick={handleUploadClick}
           disabled={uploadMutation.isPending || !isConnected}
+          onClick={handleUploadClick}
           className="gap-1.5 border-[var(--uav-stroke)] bg-white/4 text-[var(--uav-text)] hover:bg-white/8"
         >
           <HugeiconsIcon icon={Upload04Icon} className="size-3.5" strokeWidth={2} />
@@ -167,9 +167,11 @@ function Topbar({ className, onProjectChange, selectedProjectId }: TopbarProps) 
         {/* Project Selector */}
         <div className="flex items-center gap-2 rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] px-2.5 py-1">
           <span className="text-xs text-[var(--uav-text-secondary)]">Project</span>
-          <Select value={selectedProjectId} onValueChange={onProjectChange}>
+          <Select value={selectedProjectId} onValueChange={(val) => val && onProjectChange?.(val)}>
             <SelectTrigger className="h-6 min-w-40 border-0 bg-transparent px-2 text-xs">
-              <SelectValue placeholder="Select project" />
+              <SelectValue>
+                {selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name : 'Select project'}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {projects.map((project) => (

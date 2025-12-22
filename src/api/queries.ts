@@ -170,6 +170,15 @@ export function getOrthoImageUrl(): string | null {
 }
 
 /**
+ * 取得正射影像預覽圖 URL（含偵測結果，用於 PDF）
+ */
+export function getOrthoPreviewUrl(withDetections = true, width = 800, height = 600): string | null {
+  const baseUrl = getApiBaseUrl()
+  if (!baseUrl) return null
+  return `${baseUrl}/api/ortho/preview?with_detections=${withDetections}&width=${width}&height=${height}`
+}
+
+/**
  * 取得 TIFF 元資料
  */
 async function fetchTiffMetadata(): Promise<TiffMetadata | null> {
@@ -233,17 +242,18 @@ export interface ProcessingStatusResponse {
 }
 
 /**
- * 上傳影像
+ * 上傳檔案（自動判斷類型：TIFF/DSM/LAZ）
  */
-async function uploadImage(
+async function uploadFile(
   file: File,
-): Promise<{ filename: string; message: string }> {
+): Promise<{ filename: string; message: string; type: string }> {
   if (useMock()) {
     await new Promise((resolve) => setTimeout(resolve, 1000))
-    return {
-      filename: file.name,
-      message: '模擬上傳成功',
-    }
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    let type = 'ortho'
+    if (ext === 'laz' || ext === 'las') type = 'laz'
+    else if (ext === 'dsm') type = 'dsm'
+    return { filename: file.name, message: '模擬上傳成功', type }
   }
 
   const formData = new FormData()
@@ -362,15 +372,16 @@ export function useTiffMetadata() {
 }
 
 /**
- * 上傳影像 Hook
+ * 上傳檔案 Hook（支援 TIFF/DSM/LAZ）
  */
-export function useUploadImage() {
+export function useUploadFile() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: uploadImage,
+    mutationFn: uploadFile,
     onSuccess: (data) => {
-      notify.success('Upload successful', data.filename)
+      const typeLabel = data.type === 'laz' ? 'LAZ' : data.type === 'dsm' ? 'DSM' : 'Image'
+      notify.success(`${typeLabel} uploaded`, data.filename)
       queryClient.invalidateQueries({ queryKey: projectKeys.all })
       queryClient.invalidateQueries({ queryKey: orthoKeys.bounds })
     },

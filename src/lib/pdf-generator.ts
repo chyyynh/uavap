@@ -9,6 +9,111 @@ interface PdfReportOptions {
 }
 
 /**
+ * 生成簡單的偵測點分佈圖（當地圖截圖失敗時使用）
+ */
+function generateDetectionVisualization(
+  objects: DetectionObject[],
+  width: number,
+  height: number
+): string {
+  if (objects.length === 0) return ''
+
+  // 計算邊界
+  const lats = objects.map((o) => o.lat).filter((v) => v != null) as number[]
+  const lons = objects.map((o) => o.lon).filter((v) => v != null) as number[]
+
+  if (lats.length === 0 || lons.length === 0) return ''
+
+  const minLat = Math.min(...lats)
+  const maxLat = Math.max(...lats)
+  const minLon = Math.min(...lons)
+  const maxLon = Math.max(...lons)
+
+  // 加一點 padding
+  const latRange = (maxLat - minLat) * 1.2 || 0.001
+  const lonRange = (maxLon - minLon) * 1.2 || 0.001
+  const centerLat = (minLat + maxLat) / 2
+  const centerLon = (minLon + maxLon) / 2
+
+  const padding = 20
+  const effectiveWidth = width - padding * 2
+  const effectiveHeight = height - padding * 2
+
+  // 顏色映射
+  const colors: Record<string, string> = {
+    person: '#3b82f6',
+    vehicle: '#22c55e',
+    cone: '#f97316',
+  }
+
+  // 生成 SVG
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`
+  svg += `<rect width="${width}" height="${height}" fill="#1e293b"/>`
+
+  // 添加網格
+  svg += `<g stroke="#334155" stroke-width="0.5">`
+  for (let i = 0; i <= 4; i++) {
+    const y = padding + (effectiveHeight * i) / 4
+    const x = padding + (effectiveWidth * i) / 4
+    svg += `<line x1="${padding}" y1="${y}" x2="${width - padding}" y2="${y}"/>`
+    svg += `<line x1="${x}" y1="${padding}" x2="${x}" y2="${height - padding}"/>`
+  }
+  svg += `</g>`
+
+  // 繪製點
+  objects.forEach((obj) => {
+    if (obj.lat == null || obj.lon == null) return
+
+    const x = padding + ((obj.lon - (centerLon - lonRange / 2)) / lonRange) * effectiveWidth
+    const y = padding + ((centerLat + latRange / 2 - obj.lat) / latRange) * effectiveHeight
+    const color = colors[obj.cls] || '#64748b'
+
+    svg += `<circle cx="${x}" cy="${y}" r="4" fill="${color}" opacity="0.8"/>`
+  })
+
+  // 添加圖例
+  svg += `<g font-family="sans-serif" font-size="10">`
+  let legendY = height - 15
+  ;['person', 'vehicle', 'cone'].forEach((cls, i) => {
+    const count = objects.filter((o) => o.cls === cls).length
+    if (count > 0) {
+      const legendX = padding + i * 70
+      svg += `<circle cx="${legendX}" cy="${legendY}" r="4" fill="${colors[cls]}"/>`
+      svg += `<text x="${legendX + 8}" y="${legendY + 3}" fill="#94a3b8">${cls}: ${count}</text>`
+    }
+  })
+  svg += `</g>`
+
+  svg += `</svg>`
+
+  // 轉換為 base64
+  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)))
+}
+
+/**
+ * 將 SVG data URL 轉換為 PNG data URL
+ */
+async function convertSvgToPng(svgDataUrl: string, width: number, height: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        resolve(null)
+        return
+      }
+      ctx.drawImage(img, 0, 0, width, height)
+      resolve(canvas.toDataURL('image/png'))
+    }
+    img.onerror = () => resolve(null)
+    img.src = svgDataUrl
+  })
+}
+
+/**
  * 格式化日期時間
  */
 function formatDateTime(isoString: string | null): string {
@@ -152,28 +257,90 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
   doc.text('Detection Map', margin, yPos)
   yPos += 5
 
-  if (mapImageBase64) {
-    const imgWidth = contentWidth
-    const imgHeight = 80 // 固定高度
+  const imgWidth = contentWidth
+  const imgHeight = 80 // 固定高度
 
-    // 圖片邊框
-    doc.setDrawColor(226, 232, 240)
-    doc.setLineWidth(0.5)
-    doc.rect(margin, yPos, imgWidth, imgHeight)
+  // 圖片邊框
+  doc.setDrawColor(226, 232, 240)
+  doc.setLineWidth(0.5)
+  doc.rect(margin, yPos, imgWidth, imgHeight)
+
+  // 準備圖片數據
+  let imageToUse = mapImageBase64
+  let imageAdded = false
+
+  console.log('[PDF Generator] mapImageBase64 length:', mapImageBase64?.length || 0)
+
+  // 如果沒有地圖圖片或圖片太小（可能是空的），使用備用視覺化
+  if (!mapImageBase64 || mapImageBase64.length < 1000) {
+    console.log('[PDF Generator] Map image invalid or too small, generating visualization')
+    imageToUse = generateDetectionVisualization(objects, imgWidth * 3, imgHeight * 3)
+  }
+
+  if (imageToUse && imageToUse.length > 100) {
+    console.log('[PDF Generator] Adding image, prefix:', imageToUse.substring(0, 50))
 
     try {
-      doc.addImage(mapImageBase64, 'PNG', margin, yPos, imgWidth, imgHeight)
-    } catch (e) {
-      // 如果圖片添加失敗，顯示佔位符
-      doc.setFillColor(248, 250, 252)
-      doc.rect(margin, yPos, imgWidth, imgHeight, 'F')
-      doc.setTextColor(148, 163, 184)
-      doc.setFontSize(10)
-      doc.text('Map image unavailable', margin + imgWidth / 2 - 20, yPos + imgHeight / 2)
-    }
+      // 判斷格式
+      let imageFormat: 'PNG' | 'JPEG' = 'PNG'
+      let finalImage = imageToUse
 
-    yPos += imgHeight + 10
+      if (imageToUse.startsWith('data:image/jpeg')) {
+        imageFormat = 'JPEG'
+      } else if (imageToUse.startsWith('data:image/svg')) {
+        // jsPDF 不直接支援 SVG，需要先轉換為 PNG
+        console.log('[PDF Generator] Converting SVG to PNG...')
+        const svgToPng = await convertSvgToPng(imageToUse, imgWidth * 3, imgHeight * 3)
+        if (svgToPng) {
+          finalImage = svgToPng
+          imageFormat = 'PNG'
+          console.log('[PDF Generator] SVG converted, new length:', finalImage.length)
+        } else {
+          throw new Error('SVG conversion failed')
+        }
+      }
+
+      // 確保圖片數據是有效的
+      if (!finalImage.startsWith('data:image/')) {
+        throw new Error('Invalid image data format')
+      }
+
+      doc.addImage(finalImage, imageFormat, margin, yPos, imgWidth, imgHeight)
+      console.log('[PDF Generator] Image added successfully')
+      imageAdded = true
+    } catch (e) {
+      console.error('[PDF Generator] addImage error:', e)
+      // 嘗試使用備用視覺化
+      if (!imageToUse.startsWith('data:image/svg')) {
+        console.log('[PDF Generator] Trying fallback visualization...')
+        const fallback = generateDetectionVisualization(objects, imgWidth * 3, imgHeight * 3)
+        if (fallback) {
+          try {
+            const fallbackPng = await convertSvgToPng(fallback, imgWidth * 3, imgHeight * 3)
+            if (fallbackPng) {
+              doc.addImage(fallbackPng, 'PNG', margin, yPos, imgWidth, imgHeight)
+              console.log('[PDF Generator] Fallback image added successfully')
+              imageAdded = true
+            }
+          } catch (e2) {
+            console.error('[PDF Generator] Fallback also failed:', e2)
+          }
+        }
+      }
+    }
   }
+
+  // 如果圖片添加失敗，顯示佔位符
+  if (!imageAdded) {
+    console.log('[PDF Generator] Showing placeholder')
+    doc.setFillColor(248, 250, 252)
+    doc.rect(margin, yPos, imgWidth, imgHeight, 'F')
+    doc.setTextColor(148, 163, 184)
+    doc.setFontSize(10)
+    doc.text('Map image unavailable', margin + imgWidth / 2 - 20, yPos + imgHeight / 2)
+  }
+
+  yPos += imgHeight + 10
 
   // ============================================
   // 詳細資料表格
@@ -262,27 +429,71 @@ export async function captureMapImage(
 ): Promise<string> {
   const html2canvas = (await import('html2canvas')).default
 
+  console.log('[Map Capture] Starting capture, container size:', mapContainer.offsetWidth, 'x', mapContainer.offsetHeight)
+
   // 等待一下確保 tiles 載入
   await new Promise((resolve) => setTimeout(resolve, 500))
 
   const canvas = await html2canvas(mapContainer, {
     useCORS: true,
-    allowTaint: false, // 改為 false 避免跨域問題
+    allowTaint: true,
     backgroundColor: '#1e293b',
     scale: 2,
-    logging: false,
+    logging: true, // Enable logging for debugging
     imageTimeout: 15000,
+    ignoreElements: (element) => {
+      // 忽略可能造成問題的元素
+      if (element.classList?.contains('leaflet-control-container')) return true
+      if (element.tagName === 'STYLE') return true
+      return false
+    },
     onclone: (clonedDoc) => {
-      // 移除可能造成問題的元素
-      const clonedContainer = clonedDoc.body.querySelector('.leaflet-container')
-      if (clonedContainer) {
-        // 移除控制項避免干擾
-        clonedContainer.querySelectorAll('.leaflet-control-container').forEach((el) => {
-          (el as HTMLElement).style.display = 'none'
-        })
-      }
+      // 移除所有 oklch 顏色（html2canvas 不支援）
+      const allElements = clonedDoc.querySelectorAll('*')
+      allElements.forEach((el) => {
+        const htmlEl = el as HTMLElement
+        const style = htmlEl.style
+        if (style) {
+          // 清除可能含有 oklch 的樣式
+          const computedStyle = window.getComputedStyle(el)
+          if (computedStyle.backgroundColor?.includes('oklch')) {
+            style.backgroundColor = '#1e293b'
+          }
+          if (computedStyle.color?.includes('oklch')) {
+            style.color = '#ffffff'
+          }
+          if (computedStyle.borderColor?.includes('oklch')) {
+            style.borderColor = '#374151'
+          }
+        }
+      })
+
+      // 移除控制項
+      clonedDoc.querySelectorAll('.leaflet-control-container').forEach((el) => {
+        (el as HTMLElement).style.display = 'none'
+      })
     },
   })
 
-  return canvas.toDataURL('image/png')
+  console.log('[Map Capture] Canvas created:', canvas.width, 'x', canvas.height)
+
+  // 檢查 canvas 是否為空（全部是背景色）
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    const imageData = ctx.getImageData(0, 0, Math.min(100, canvas.width), Math.min(100, canvas.height))
+    const pixels = imageData.data
+    let nonBackgroundPixels = 0
+    for (let i = 0; i < pixels.length; i += 4) {
+      // 檢查是否不是背景色 (#1e293b = 30, 41, 59)
+      if (pixels[i] !== 30 || pixels[i + 1] !== 41 || pixels[i + 2] !== 59) {
+        nonBackgroundPixels++
+      }
+    }
+    console.log('[Map Capture] Non-background pixels in sample:', nonBackgroundPixels, '/', pixels.length / 4)
+  }
+
+  const dataUrl = canvas.toDataURL('image/png')
+  console.log('[Map Capture] Data URL length:', dataUrl.length, 'prefix:', dataUrl.substring(0, 30))
+
+  return dataUrl
 }
