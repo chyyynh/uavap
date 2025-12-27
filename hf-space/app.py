@@ -93,6 +93,39 @@ HEIGHT_RANGE = {
     "vehicle": (1.0, 2.2),
 }
 
+# ============================================
+# 土地覆蓋設定 (UPerNet)
+# ============================================
+LANDCOVER_CLASSES = {
+    0: "bare-ground",
+    1: "tree",
+    2: "road",
+    3: "pavement",
+    4: "grass",
+    5: "building",
+}
+
+LANDCOVER_COLORS = {
+    "bare-ground": [222, 184, 135],
+    "tree": [34, 139, 34],
+    "road": [128, 128, 128],
+    "pavement": [178, 34, 34],
+    "grass": [124, 252, 0],
+    "building": [255, 140, 0],
+}
+
+UPERNET_CONFIG = {
+    "filename": "UPerNet_best.pth",
+    "num_classes": 6,
+    "tile_size": (64, 64),
+    "overlap": 0.5,
+    "encoder_name": "resnet50",
+}
+
+# ImageNet normalization
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
+
 HEIGHT_PRIOR = {
     "person": {"mean": 1.70, "std": 0.08},
     "cone": {"mean": 0.45, "std": 0.10},
@@ -117,6 +150,8 @@ ref_ortho_cache = {"data": None, "transform": None, "loaded": False}
 ref_dsm_cache = {"data": None, "transform": None, "loaded": False}
 change_detection_cache = {"result": None, "computed": False}
 models_cache = {"loaded": False, "models": {}}
+upernet_cache = {"loaded": False, "model": None}
+landcover_cache = {"mask": None, "stats": None, "computed": False}
 processing_state = {"job_id": None, "status": "idle", "progress": 0, "current_step": "", "elapsed_seconds": 0, "results": [], "start_time": None}
 
 # ============================================
@@ -129,7 +164,7 @@ class ProcessingRequest(BaseModel):
     detect_cone: bool = True
     include_elevation: bool = True
     include_terrain: bool = False  # 地形分析（需要 DSM）
-    include_change_detection: bool = False  # 地表變化偵測（需要多期資料）
+    include_landcover: bool = False  # 土地覆蓋偵測（UPerNet）
 
 # ============================================
 # 核心函式
@@ -289,6 +324,166 @@ def run_yolo_detection(classes_to_detect: list[str], progress_callback=None) -> 
 
     print(f"[YOLO] After OBIA: {len(records)}")
     return records
+
+
+# ============================================
+# UPerNet 土地覆蓋函式
+# ============================================
+def load_upernet_model():
+    """載入 UPerNet 模型"""
+    if upernet_cache["loaded"]:
+        return upernet_cache["model"]
+
+    try:
+        import torch
+        import segmentation_models_pytorch as smp
+    except ImportError as e:
+        print(f"[UPerNet] Missing dependency: {e}")
+        return None
+
+    model_path = get_model_path(UPERNET_CONFIG["filename"])
+    if not model_path.exists():
+        print(f"[UPerNet] Model not found: {model_path}")
+        return None
+
+    try:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = smp.UPerNet(
+            encoder_name=UPERNET_CONFIG["encoder_name"],
+            encoder_weights=None,
+            in_channels=3,
+            classes=UPERNET_CONFIG["num_classes"]
+        ).to(device)
+
+        state_dict = torch.load(str(model_path), map_location=device)
+        model.load_state_dict(state_dict, strict=False)
+        model.eval()
+
+        upernet_cache["model"] = model
+        upernet_cache["loaded"] = True
+        upernet_cache["device"] = device
+        print(f"[UPerNet] Loaded on {device}")
+        return model
+    except Exception as e:
+        print(f"[UPerNet] Failed to load: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def run_landcover_segmentation(progress_callback=None) -> dict:
+    """執行土地覆蓋分割"""
+    import torch
+    import torchvision.transforms as T
+    import cv2
+
+    if ortho_cache["src"] is None:
+        raise ValueError("No ortho image loaded")
+
+    model = load_upernet_model()
+    if model is None:
+        raise ValueError("Failed to load UPerNet model")
+
+    device = upernet_cache["device"]
+    src = ortho_cache["src"]
+
+    # Read image
+    data = src.read([1, 2, 3])
+    img = np.moveaxis(data, 0, -1)
+
+    # Normalize to uint8 if needed
+    if img.dtype != np.uint8:
+        img = img.astype(np.float32)
+        img = (img - img.min()) / max(img.max() - img.min(), 1e-6) * 255
+        img = img.astype(np.uint8)
+
+    H, W = img.shape[:2]
+    th, tw = UPERNET_CONFIG["tile_size"]
+    overlap = UPERNET_CONFIG["overlap"]
+    num_classes = UPERNET_CONFIG["num_classes"]
+
+    stride_h = max(1, int(th * (1 - overlap)))
+    stride_w = max(1, int(tw * (1 - overlap)))
+
+    # Padding
+    pad_h = max(((H - th) // stride_h + 1) * stride_h + th - H, 0)
+    pad_w = max(((W - tw) // stride_w + 1) * stride_w + tw - W, 0)
+    img_pad = cv2.copyMakeBorder(img, 0, pad_h, 0, pad_w, cv2.BORDER_REFLECT_101)
+    Hp, Wp = img_pad.shape[:2]
+
+    # Accumulators
+    logit_sum = np.zeros((num_classes, Hp, Wp), np.float32)
+    count = np.zeros((Hp, Wp), np.float32)
+
+    to_tensor = T.Compose([
+        T.ToTensor(),
+        T.Normalize(IMAGENET_MEAN, IMAGENET_STD)
+    ])
+
+    # Calculate total tiles for progress
+    total_tiles = ((Hp - th) // stride_h + 1) * ((Wp - tw) // stride_w + 1)
+    tile_count = 0
+
+    # Sliding window inference
+    with torch.no_grad():
+        for y in range(0, Hp - th + 1, stride_h):
+            for x in range(0, Wp - tw + 1, stride_w):
+                tile = img_pad[y:y+th, x:x+tw]
+                tin = to_tensor(tile).unsqueeze(0).to(device)
+                logits = model(tin)
+                logits = logits[0] if isinstance(logits, (list, tuple)) else logits
+                logit_sum[:, y:y+th, x:x+tw] += logits.squeeze(0).cpu().numpy()
+                count[y:y+th, x:x+tw] += 1
+
+                tile_count += 1
+                if progress_callback and tile_count % 100 == 0:
+                    progress = int(tile_count / total_tiles * 100)
+                    progress_callback(progress, f"Landcover segmentation ({tile_count}/{total_tiles})...")
+
+    # Get prediction
+    pred = np.argmax(logit_sum / np.maximum(count, 1e-6), axis=0).astype(np.uint8)
+    pred = pred[:H, :W]
+
+    # Handle nodata (black pixels)
+    black_mask = np.all(img <= 10, axis=2)
+    pred[black_mask] = 255
+
+    # Compute statistics
+    stats = {}
+    total_valid = np.sum(pred < num_classes)
+    for class_id, class_name in LANDCOVER_CLASSES.items():
+        class_pixels = np.sum(pred == class_id)
+        stats[class_name] = {
+            "pixels": int(class_pixels),
+            "percentage": round(class_pixels / total_valid * 100, 2) if total_valid > 0 else 0
+        }
+
+    # Cache results
+    landcover_cache["mask"] = pred
+    landcover_cache["stats"] = stats
+    landcover_cache["computed"] = True
+
+    print(f"[UPerNet] Segmentation complete: {H}x{W}")
+    return {"stats": stats, "shape": (H, W)}
+
+
+def get_landcover_colorized() -> np.ndarray:
+    """取得彩色土地覆蓋圖"""
+    if not landcover_cache["computed"] or landcover_cache["mask"] is None:
+        return None
+
+    mask = landcover_cache["mask"]
+    H, W = mask.shape
+    color_img = np.zeros((H, W, 3), dtype=np.uint8)
+
+    for class_id, class_name in LANDCOVER_CLASSES.items():
+        color = LANDCOVER_COLORS[class_name]
+        color_img[mask == class_id] = color
+
+    # Set nodata to black
+    color_img[mask == 255] = [0, 0, 0]
+
+    return color_img
 
 
 def sample_trunc_normal(mean, std, low, high):
@@ -644,12 +839,21 @@ async def start_processing(request: ProcessingRequest = None):
             if request.detect_person: classes.append("person")
             if request.detect_cone: classes.append("cone")
 
+            # YOLO detection (0-70%)
             update_progress(10, "Loading models...")
             detections = run_yolo_detection(classes, update_progress)
 
+            # Height analysis (70-80%)
             if request.include_elevation:
-                update_progress(85, "Height analysis...")
+                update_progress(70, "Height analysis...")
                 detections = compute_height_volume(detections, update_progress)
+
+            # Landcover segmentation (80-95%)
+            if request.include_landcover:
+                update_progress(80, "Loading UPerNet model...")
+                def landcover_progress(p, step):
+                    update_progress(80 + int(p * 0.15), step)
+                run_landcover_segmentation(landcover_progress)
 
             update_progress(95, "Coordinate transform...")
             detections = add_latlon_to_detections(detections)
@@ -744,3 +948,101 @@ async def export_stats():
         "cone": len([r for r in results if r.get("cls") == "cone"]),
     }
     return {"generated_at": datetime.now().isoformat(), "summary": stats, "detections": results}
+
+
+# ============================================
+# 土地覆蓋 API
+# ============================================
+@app.get("/api/landcover/status")
+async def get_landcover_status():
+    """取得土地覆蓋偵測狀態"""
+    return {
+        "computed": landcover_cache["computed"],
+        "has_stats": landcover_cache["stats"] is not None,
+    }
+
+
+@app.get("/api/landcover/stats")
+async def get_landcover_stats():
+    """取得土地覆蓋統計"""
+    if not landcover_cache["computed"]:
+        raise HTTPException(status_code=400, detail="Landcover not computed yet")
+
+    return convert_numpy({
+        "classes": LANDCOVER_CLASSES,
+        "colors": LANDCOVER_COLORS,
+        "stats": landcover_cache["stats"],
+    })
+
+
+@app.get("/api/landcover/image")
+async def get_landcover_image():
+    """取得土地覆蓋彩色圖"""
+    if not landcover_cache["computed"]:
+        raise HTTPException(status_code=400, detail="Landcover not computed yet")
+
+    from PIL import Image
+    color_img = get_landcover_colorized()
+    if color_img is None:
+        raise HTTPException(status_code=500, detail="Failed to generate colorized landcover")
+
+    img = Image.fromarray(color_img)
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+    return Response(content=buffer.getvalue(), media_type="image/png")
+
+
+@app.get("/api/landcover/overlay")
+async def get_landcover_overlay(alpha: float = 0.5):
+    """取得土地覆蓋疊加圖（正射影像 + 土地覆蓋）"""
+    if not landcover_cache["computed"]:
+        raise HTTPException(status_code=400, detail="Landcover not computed yet")
+    if ortho_cache["src"] is None:
+        raise HTTPException(status_code=400, detail="No ortho image loaded")
+
+    from PIL import Image
+
+    # Get ortho image
+    src = ortho_cache["src"]
+    data = src.read([1, 2, 3])
+    ortho_img = np.moveaxis(data, 0, -1)
+    if ortho_img.dtype != np.uint8:
+        ortho_img = ((ortho_img - ortho_img.min()) / (ortho_img.max() - ortho_img.min() + 1e-6) * 255).astype(np.uint8)
+
+    # Get landcover colorized
+    color_img = get_landcover_colorized()
+    if color_img is None:
+        raise HTTPException(status_code=500, detail="Failed to generate colorized landcover")
+
+    # Create mask for valid landcover (not nodata)
+    mask = landcover_cache["mask"]
+    valid_mask = (mask < UPERNET_CONFIG["num_classes"]).astype(np.float32)
+
+    # Blend
+    blended = ortho_img.astype(np.float32) * (1 - alpha * valid_mask[:, :, np.newaxis]) + \
+              color_img.astype(np.float32) * alpha * valid_mask[:, :, np.newaxis]
+    blended = np.clip(blended, 0, 255).astype(np.uint8)
+
+    img = Image.fromarray(blended)
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+    return Response(content=buffer.getvalue(), media_type="image/png")
+
+
+@app.post("/api/landcover/run")
+async def run_landcover():
+    """單獨執行土地覆蓋偵測"""
+    if ortho_cache["src"] is None:
+        raise HTTPException(status_code=400, detail="Please upload an image first")
+
+    try:
+        result = run_landcover_segmentation()
+        return convert_numpy({
+            "status": "done",
+            "stats": result["stats"],
+            "shape": result["shape"],
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

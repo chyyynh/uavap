@@ -14,3 +14,5 @@ geopandas>=1.0.0
 shapely>=2.0.0
 pyproj>=3.6.0
 reportlab>=4.0.0
+segmentation-models-pytorch>=0.3.0
+opencv-python-headless>=4.8.0
