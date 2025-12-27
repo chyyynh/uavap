@@ -34,6 +34,7 @@ interface IconButtonProps
   extends ButtonPrimitive.Props,
     VariantProps<typeof iconButtonVariants> {
   className?: string
+  children?: React.ReactNode
 }
 
 function IconButton({

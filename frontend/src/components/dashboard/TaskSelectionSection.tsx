@@ -104,11 +104,11 @@ function TaskSelectionSection() {
   )
 
   return (
-    <div className="border-t border-[var(--uav-stroke)] pt-3">
-      <div className="rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] p-3">
+    <div className="border-t border-(--uav-stroke) pt-3">
+      <div className="rounded-(--uav-radius-sm) border border-(--uav-stroke) bg-(--uav-panel-elevated) p-3">
             {/* Detection Targets - Chips */}
             <div className="mb-4">
-              <span className="mb-2 block text-xs text-[var(--uav-text-tertiary)]">
+              <span className="mb-2 block text-xs text-(--uav-text-tertiary)">
                 偵測目標
               </span>
               <div className="flex flex-wrap gap-2">
@@ -118,10 +118,10 @@ function TaskSelectionSection() {
                     type="button"
                     onClick={() => setOption(target.key, !options[target.key])}
                     className={cn(
-                      'flex items-center gap-2 rounded-[var(--uav-radius-sm)] border px-3 py-2 text-sm transition-all',
+                      'flex items-center gap-2 rounded-(--uav-radius-sm) border px-3 py-2 text-sm transition-all',
                       options[target.key]
-                        ? 'border-[var(--uav-teal)]/40 bg-[var(--uav-teal)]/10 text-[var(--uav-teal)]'
-                        : 'border-[var(--uav-stroke)] bg-transparent text-[var(--uav-text-secondary)] hover:border-[var(--uav-text-tertiary)]'
+                        ? 'border-(--uav-teal)/40 bg-(--uav-teal)/10 text-(--uav-teal)'
+                        : 'border-(--uav-stroke) bg-transparent text-(--uav-text-secondary) hover:border-(--uav-text-tertiary)'
                     )}
                   >
                     <HugeiconsIcon
@@ -136,17 +136,17 @@ function TaskSelectionSection() {
             </div>
 
             {/* Analysis Options - Switches */}
-            <div className="space-y-1 border-t border-[var(--uav-stroke)] pt-3">
+            <div className="space-y-1 border-t border-(--uav-stroke) pt-3">
               {ANALYSIS_OPTIONS.map((option) => (
                 <div
                   key={option.key}
-                  className="group flex items-center justify-between gap-3 rounded-[var(--uav-radius-xs)] px-1 py-1.5"
+                  className="group flex items-center justify-between gap-3 rounded-(--uav-radius-xs) px-1 py-1.5"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-[var(--uav-text)]">
+                    <span className="text-sm text-(--uav-text)">
                       {option.label}
                       {option.subtitle && (
-                        <span className="ml-1.5 text-xs text-[var(--uav-text-tertiary)]">
+                        <span className="ml-1.5 text-xs text-(--uav-text-tertiary)">
                           {option.subtitle}
                         </span>
                       )}
@@ -182,8 +182,8 @@ function TaskSelectionSection() {
             </div>
 
             {/* File Upload Section */}
-            <div className="mt-4 border-t border-[var(--uav-stroke)] pt-3">
-              <span className="mb-2 block text-xs text-[var(--uav-text-tertiary)]">
+            <div className="mt-4 border-t border-(--uav-stroke) pt-3">
+              <span className="mb-2 block text-xs text-(--uav-text-tertiary)">
                 檔案上傳
               </span>
               <div className="space-y-2">
@@ -198,10 +198,10 @@ function TaskSelectionSection() {
                     <div
                       key={item.key}
                       className={cn(
-                        'flex items-center gap-3 rounded-[var(--uav-radius-sm)] border px-3 py-2 transition-all',
+                        'flex items-center gap-3 rounded-(--uav-radius-sm) border px-3 py-2 transition-all',
                         isUploaded
-                          ? 'border-[var(--uav-teal)]/40 bg-[var(--uav-teal)]/5'
-                          : 'border-[var(--uav-stroke)] bg-transparent'
+                          ? 'border-(--uav-teal)/40 bg-(--uav-teal)/5'
+                          : 'border-(--uav-stroke) bg-transparent'
                       )}
                     >
                       <HugeiconsIcon
@@ -209,20 +209,20 @@ function TaskSelectionSection() {
                         strokeWidth={1.5}
                         className={cn(
                           'size-5',
-                          isUploaded ? 'text-[var(--uav-teal)]' : 'text-[var(--uav-text-tertiary)]'
+                          isUploaded ? 'text-(--uav-teal)' : 'text-(--uav-text-tertiary)'
                         )}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-[var(--uav-text)]">{item.label}</span>
+                          <span className="text-sm text-(--uav-text)">{item.label}</span>
                           {fileInfo && (
-                            <span className="truncate text-xs text-[var(--uav-text-tertiary)]">
+                            <span className="truncate text-xs text-(--uav-text-tertiary)">
                               {fileInfo.name}
                             </span>
                           )}
                         </div>
                         {!isUploaded && (
-                          <span className="text-xs text-[var(--uav-text-tertiary)]">
+                          <span className="text-xs text-(--uav-text-tertiary)">
                             {item.helpText}
                           </span>
                         )}
@@ -239,10 +239,10 @@ function TaskSelectionSection() {
                         onClick={() => fileInputRefs.current[item.key]?.click()}
                         disabled={uploadMutation.isPending}
                         className={cn(
-                          'flex items-center gap-1.5 rounded-[var(--uav-radius-xs)] px-2 py-1 text-xs transition-all',
+                          'flex items-center gap-1.5 rounded-(--uav-radius-xs) px-2 py-1 text-xs transition-all',
                           isUploaded
-                            ? 'bg-transparent text-[var(--uav-text-secondary)] hover:text-[var(--uav-text)]'
-                            : 'bg-[var(--uav-teal)]/10 text-[var(--uav-teal)] hover:bg-[var(--uav-teal)]/20',
+                            ? 'bg-transparent text-(--uav-text-secondary) hover:text-(--uav-text)'
+                            : 'bg-(--uav-teal)/10 text-(--uav-teal) hover:bg-(--uav-teal)/20',
                           uploadMutation.isPending && 'opacity-50 cursor-not-allowed'
                         )}
                       >

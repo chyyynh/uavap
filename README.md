@@ -1,15 +1,6 @@
 # UAV AIP Dashboard
 
-無人機自動巡檢平台 (UAV Automated Inspection Platform) - 物件偵測視覺化儀表板
-
-## 功能特色
-
-- 🗺️ **互動式地圖** - 基於 Leaflet 的地圖，顯示偵測物件標記
-- 📊 **即時統計** - 顯示人員、車輛、角錐等物件數量
-- 📋 **屬性表格** - 類似 QGIS 的屬性表，支援篩選與點選同步
-- 🎛️ **圖層控制** - 可切換顯示不同類別的偵測結果
-- ⚡ **處理模擬** - 展示偵測任務的執行進度
-- 🔗 **API 整合** - 支援連接 Colab 後端進行即時推論
+無人機自動巡檢平台 (UAV Automated Inspection Platform) - 物件偵測與土地覆蓋分析儀表板
 
 ## 技術架構
 
@@ -21,16 +12,34 @@
 - **Map**: react-leaflet
 - **State**: TanStack Query
 
-### 後端 (Colab)
+### 後端 (HuggingFace Spaces)
 
 - **Framework**: FastAPI
-- **Tunnel**: Cloudflare Tunnel (trycloudflare.com)
+- **Hosting**: HuggingFace Spaces (Docker)
+- **Models**: HuggingFace Hub
+
+## HuggingFace 資源
+
+| 資源          | 連結                                                                                 | 說明                    |
+| ------------- | ------------------------------------------------------------------------------------ | ----------------------- |
+| **API Space** | [chyyynh/uav-detection-api](https://huggingface.co/spaces/chyyynh/uav-detection-api) | FastAPI 後端服務        |
+| **Models**    | [chyyynh/uav-yolo-models](https://huggingface.co/chyyynh/uav-yolo-models)            | YOLO + UPerNet 模型權重 |
+
+### 模型清單
+
+| 模型               | 用途                              | 大小   |
+| ------------------ | --------------------------------- | ------ |
+| `vehicle.pt`       | 車輛偵測 (YOLO)                   | ~6MB   |
+| `human.pt`         | 人員偵測 (YOLO)                   | ~6MB   |
+| `cone.pt`          | 交通錐偵測 (YOLO)                 | ~6MB   |
+| `UPerNet_best.pth` | 土地覆蓋分割 (UPerNet + ResNet50) | ~149MB |
 
 ## 快速開始
 
 ### 1. 安裝依賴
 
 ```bash
+cd frontend
 pnpm install
 ```
 
@@ -44,78 +53,119 @@ pnpm dev
 
 前往 http://localhost:3000
 
-## 連接 Colab API
-
-### Step 1: 在 Colab 執行安裝
-
-```python
-!pip install fastapi uvicorn -q
-!wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-!dpkg -i cloudflared-linux-amd64.deb
-```
-
-### Step 2: 執行 API 伺服器
-
-複製 `colab_server_example.py` 的內容到 Colab 執行，會取得一個公開網址：
-
-```
-🚀 API 伺服器已啟動！
-📡 公開網址: https://xxx-xxx.trycloudflare.com
-```
-
-### Step 3: 設定前端 API 網址
-
-修改 `src/api/queries.ts` 第 17 行：
-
-```typescript
-const API_BASE_URL: string | null = 'https://xxx-xxx.trycloudflare.com'
-```
-
-### Step 4: 重新啟動前端
-
-```bash
-pnpm dev
-```
+預設會連接 HuggingFace Spaces API：`https://chyyynh-uav-detection-api.hf.space`
 
 ## API 端點
 
-| 端點 | 方法 | 說明 |
-|------|------|------|
-| `/` | GET | 健康檢查 |
-| `/api/projects` | GET | 取得專案列表 |
-| `/api/gpu/status` | GET | 取得 GPU 狀態 |
-| `/api/detections/{project_id}` | GET | 取得偵測結果 |
+### 基本
+
+| 端點              | 方法 | 說明          |
+| ----------------- | ---- | ------------- |
+| `/`               | GET  | 健康檢查      |
+| `/api/projects`   | GET  | 取得專案列表  |
+| `/api/gpu/status` | GET  | 取得 GPU 狀態 |
+
+### 上傳
+
+| 端點              | 方法 | 說明                             |
+| ----------------- | ---- | -------------------------------- |
+| `/api/upload`     | POST | 上傳正射影像 (TIFF) 或點雲 (LAZ) |
+| `/api/upload/dsm` | POST | 上傳 DSM (GeoTIFF)               |
+
+### 正射影像
+
+| 端點                  | 方法 | 說明                   |
+| --------------------- | ---- | ---------------------- |
+| `/api/ortho/bounds`   | GET  | 取得影像邊界 (WGS84)   |
+| `/api/ortho/image`    | GET  | 取得完整正射影像 (PNG) |
+| `/api/ortho/preview`  | GET  | 取得縮圖預覽           |
+| `/api/ortho/metadata` | GET  | 取得 TIFF 元資料       |
+
+### 處理任務
+
+| 端點                           | 方法 | 說明             |
+| ------------------------------ | ---- | ---------------- |
+| `/api/process`                 | POST | 啟動處理任務     |
+| `/api/process/status`          | GET  | 取得目前處理狀態 |
+| `/api/process/{job_id}/status` | GET  | 取得指定任務狀態 |
+| `/api/detections/{project_id}` | GET  | 取得偵測結果     |
+
+#### ProcessingRequest 參數
+
+```json
+{
+  "project_id": "current",
+  "detect_person": true,
+  "detect_vehicle": true,
+  "detect_cone": true,
+  "include_elevation": true,
+  "include_terrain": false,
+  "include_landcover": false
+}
+```
+
+### 地形分析
+
+| 端點                       | 方法 | 說明                  |
+| -------------------------- | ---- | --------------------- |
+| `/api/terrain/status`      | GET  | DSM 載入狀態          |
+| `/api/terrain/stats`       | GET  | 地形統計 (坡度、坡向) |
+| `/api/terrain/point?x=&y=` | GET  | 指定座標的地形資訊    |
+
+### 土地覆蓋 (UPerNet)
+
+| 端點                               | 方法 | 說明                        |
+| ---------------------------------- | ---- | --------------------------- |
+| `/api/landcover/status`            | GET  | 土地覆蓋計算狀態            |
+| `/api/landcover/stats`             | GET  | 各類別統計 (像素數、百分比) |
+| `/api/landcover/image`             | GET  | 彩色分割圖 (PNG)            |
+| `/api/landcover/overlay?alpha=0.5` | GET  | 正射影像疊加分割圖          |
+| `/api/landcover/run`               | POST | 單獨執行土地覆蓋偵測        |
+
+#### 土地覆蓋類別
+
+| ID  | 類別               | 顏色 (RGB)      |
+| --- | ------------------ | --------------- |
+| 0   | bare-ground (裸地) | [222, 184, 135] |
+| 1   | tree (樹木)        | [34, 139, 34]   |
+| 2   | road (道路)        | [128, 128, 128] |
+| 3   | pavement (鋪面)    | [178, 34, 34]   |
+| 4   | grass (草地)       | [124, 252, 0]   |
+| 5   | building (建物)    | [255, 140, 0]   |
+
+### 匯出
+
+| 端點                | 方法 | 說明              |
+| ------------------- | ---- | ----------------- |
+| `/api/export/stats` | GET  | 匯出偵測統計 JSON |
 
 ## 專案結構
 
 ```
-src/
-├── api/
-│   ├── queries.ts          # TanStack Query hooks
-│   └── mock-data.ts        # 模擬資料
-├── components/
-│   ├── dashboard/          # Dashboard 元件
-│   │   ├── DashboardLayout.tsx
-│   │   ├── Topbar.tsx
-│   │   ├── Sidebar.tsx
-│   │   ├── MapView.tsx
-│   │   ├── LayerPanel.tsx
-│   │   └── ...
-│   └── ui/                 # 通用 UI 元件
-├── hooks/
-│   ├── use-processing.ts
-│   ├── use-task-options.ts
-│   └── use-layer-visibility.ts
-├── types/
-│   └── detection.ts        # TypeScript 型別定義
-└── routes/
-    └── index.tsx           # Dashboard 頁面
+uavap/
+├── frontend/              # React 前端
+│   └── src/
+│       ├── api/           # TanStack Query hooks
+│       ├── components/    # UI 元件
+│       ├── contexts/      # React Context
+│       └── routes/        # 頁面路由
+├── hf-space/              # HuggingFace Spaces 後端
+│   ├── app.py             # FastAPI 應用
+│   ├── Dockerfile         # Docker 設定
+│   └── requirements.txt   # Python 依賴
+├── model/                 # 模型權重 (本地)
+└── notebooks/             # Jupyter notebooks
 ```
 
-## 開發模式 vs 生產模式
+## 檔案需求
 
-- **開發模式**: `API_BASE_URL = null`，使用內建 mock 資料
-- **生產模式**: `API_BASE_URL = 'https://...'`，連接真實 API
+根據選擇的任務選項，需要上傳不同的檔案：
+
+| 任務選項       | 需要的檔案                                  |
+| -------------- | ------------------------------------------- |
+| 基本物件偵測   | `odm_orthophoto.tif`                        |
+| + 高程與高度   | + `dsm.tif` + `odm_georeferenced_model.laz` |
+| + 地表變化偵測 | + `dsm.tif` (土地覆蓋使用 UPerNet)          |
 
 ## License
 
