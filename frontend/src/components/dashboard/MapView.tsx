@@ -9,7 +9,6 @@ import {
   ScaleControl,
   ZoomControl,
   Popup,
-  GeoJSON,
   ImageOverlay,
   useMap,
 } from 'react-leaflet'
@@ -23,7 +22,6 @@ import type { DetectionObject, LayerVisibility, ObjectClass, OrthoBounds } from 
 import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
-  LANDCOVER_GEOJSON,
 } from '@/api/mock-data'
 
 interface MapViewProps {
@@ -37,6 +35,9 @@ interface MapViewProps {
   mapRef?: React.MutableRefObject<LeafletMap | null>
   orthoBounds?: OrthoBounds | null
   orthoUrl?: string | null
+  landcoverUrl?: string | null
+  slopeUrl?: string | null
+  aspectUrl?: string | null
 }
 
 const MARKER_COLORS: Record<ObjectClass, string> = {
@@ -61,6 +62,9 @@ function MapView({
   mapRef,
   orthoBounds,
   orthoUrl,
+  landcoverUrl,
+  slopeUrl,
+  aspectUrl,
 }: MapViewProps) {
   const [hoveredObject, setHoveredObject] = React.useState<DetectionObject | null>(null)
   const [hoverPosition, setHoverPosition] = React.useState({ x: 0, y: 0 })
@@ -127,15 +131,42 @@ function MapView({
           />
         )}
 
-        {layerVisibility.landcover && (
-          <GeoJSON
-            data={LANDCOVER_GEOJSON as any}
-            style={() => ({
-              weight: 1,
-              opacity: 0.9,
-              fillOpacity: 0.15,
-              color: '#22c55e',
-            })}
+        {layerVisibility.landcover && orthoBounds && landcoverUrl &&
+         orthoBounds.north !== undefined && orthoBounds.south !== undefined &&
+         orthoBounds.east !== undefined && orthoBounds.west !== undefined && (
+          <ImageOverlay
+            url={landcoverUrl}
+            bounds={[
+              [orthoBounds.south, orthoBounds.west],
+              [orthoBounds.north, orthoBounds.east],
+            ]}
+            opacity={0.7}
+          />
+        )}
+
+        {layerVisibility.slope && orthoBounds && slopeUrl &&
+         orthoBounds.north !== undefined && orthoBounds.south !== undefined &&
+         orthoBounds.east !== undefined && orthoBounds.west !== undefined && (
+          <ImageOverlay
+            url={slopeUrl}
+            bounds={[
+              [orthoBounds.south, orthoBounds.west],
+              [orthoBounds.north, orthoBounds.east],
+            ]}
+            opacity={0.7}
+          />
+        )}
+
+        {layerVisibility.aspect && orthoBounds && aspectUrl &&
+         orthoBounds.north !== undefined && orthoBounds.south !== undefined &&
+         orthoBounds.east !== undefined && orthoBounds.west !== undefined && (
+          <ImageOverlay
+            url={aspectUrl}
+            bounds={[
+              [orthoBounds.south, orthoBounds.west],
+              [orthoBounds.north, orthoBounds.east],
+            ]}
+            opacity={0.7}
           />
         )}
 

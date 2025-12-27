@@ -1,5 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { DetectionObject, Project, GpuStatus, OrthoBounds, TiffMetadata } from '@/types/detection'
+import type {
+  DetectionObject,
+  Project,
+  GpuStatus,
+  OrthoBounds,
+  TiffMetadata,
+  LandcoverStats,
+  LandcoverStatus,
+  TerrainStats,
+  TerrainStatus,
+} from '@/types/detection'
 import { MOCK_OBJECTS, MOCK_PROJECTS, MOCK_GPU_STATUS } from './mock-data'
 import { notify } from '@/components/ui/sonner'
 
@@ -69,6 +79,16 @@ export const processingKeys = {
 export const orthoKeys = {
   bounds: ['ortho', 'bounds'] as const,
   metadata: ['ortho', 'metadata'] as const,
+}
+
+export const landcoverKeys = {
+  status: ['landcover', 'status'] as const,
+  stats: ['landcover', 'stats'] as const,
+}
+
+export const terrainKeys = {
+  status: ['terrain', 'status'] as const,
+  stats: ['terrain', 'stats'] as const,
 }
 
 // ============================================
@@ -202,6 +222,107 @@ async function fetchTiffMetadata(): Promise<TiffMetadata | null> {
   } catch {
     return null
   }
+}
+
+// ============================================
+// Landcover 相關
+// ============================================
+
+/**
+ * 取得土地覆蓋狀態
+ */
+async function fetchLandcoverStatus(): Promise<LandcoverStatus> {
+  if (useMock()) {
+    return { computed: false, has_stats: false }
+  }
+
+  return apiRequest<LandcoverStatus>('/api/landcover/status')
+}
+
+/**
+ * 取得土地覆蓋統計
+ */
+async function fetchLandcoverStats(): Promise<LandcoverStats | null> {
+  if (useMock()) {
+    return null
+  }
+
+  try {
+    return await apiRequest<LandcoverStats>('/api/landcover/stats')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 取得土地覆蓋疊加圖 URL
+ */
+export function getLandcoverOverlayUrl(alpha = 0.5): string | null {
+  const baseUrl = getApiBaseUrl()
+  if (!baseUrl) return null
+  return `${baseUrl}/api/landcover/overlay?alpha=${alpha}`
+}
+
+/**
+ * 執行土地覆蓋分析
+ */
+async function runLandcoverAnalysis(): Promise<{ status: string; stats: Record<string, unknown> }> {
+  return apiRequest('/api/landcover/run', { method: 'POST' })
+}
+
+// ============================================
+// Terrain 相關
+// ============================================
+
+/**
+ * 取得地形分析狀態
+ */
+async function fetchTerrainStatus(): Promise<TerrainStatus> {
+  if (useMock()) {
+    return { computed: false, has_stats: false, dsm_loaded: false }
+  }
+
+  return apiRequest<TerrainStatus>('/api/terrain/status')
+}
+
+/**
+ * 取得地形統計
+ */
+async function fetchTerrainStats(): Promise<TerrainStats | null> {
+  if (useMock()) {
+    return null
+  }
+
+  try {
+    return await apiRequest<TerrainStats>('/api/terrain/stats')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 取得坡度圖 URL
+ */
+export function getSlopeImageUrl(): string | null {
+  const baseUrl = getApiBaseUrl()
+  if (!baseUrl) return null
+  return `${baseUrl}/api/terrain/slope`
+}
+
+/**
+ * 取得坡向圖 URL
+ */
+export function getAspectImageUrl(): string | null {
+  const baseUrl = getApiBaseUrl()
+  if (!baseUrl) return null
+  return `${baseUrl}/api/terrain/aspect`
+}
+
+/**
+ * 執行地形分析
+ */
+async function runTerrainAnalysis(): Promise<{ status: string; stats: TerrainStats }> {
+  return apiRequest('/api/terrain/run', { method: 'POST' })
 }
 
 // ============================================
@@ -393,8 +514,14 @@ export function useUploadFile() {
     onSuccess: (data) => {
       const typeLabel = data.type === 'laz' ? 'LAZ' : data.type === 'dsm' ? 'DSM' : 'Image'
       notify.success(`${typeLabel} uploaded`, data.filename)
-      queryClient.invalidateQueries({ queryKey: projectKeys.all })
-      queryClient.invalidateQueries({ queryKey: orthoKeys.bounds })
+
+      // 上傳新的 ortho 時，清除所有快取（包含舊的偵測結果）
+      if (data.type === 'ortho') {
+        queryClient.clear()
+      } else {
+        queryClient.invalidateQueries({ queryKey: projectKeys.all })
+        queryClient.invalidateQueries({ queryKey: orthoKeys.bounds })
+      }
     },
     onError: (error) => {
       notify.error('Upload failed', error instanceof Error ? error.message : 'Unknown error')
@@ -432,6 +559,98 @@ export function useProcessingStatus(jobId: string | null) {
         return false
       }
       return 1000 // 每秒更新一次
+    },
+  })
+}
+
+// ============================================
+// Landcover Query Hooks
+// ============================================
+
+/**
+ * 取得土地覆蓋狀態 Hook
+ */
+export function useLandcoverStatus() {
+  return useQuery({
+    queryKey: landcoverKeys.status,
+    queryFn: fetchLandcoverStatus,
+    enabled: !useMock(),
+    refetchInterval: 5000, // 每 5 秒更新一次狀態
+  })
+}
+
+/**
+ * 取得土地覆蓋統計 Hook
+ */
+export function useLandcoverStats() {
+  return useQuery({
+    queryKey: landcoverKeys.stats,
+    queryFn: fetchLandcoverStats,
+    enabled: !useMock(),
+  })
+}
+
+/**
+ * 執行土地覆蓋分析 Hook
+ */
+export function useRunLandcover() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: runLandcoverAnalysis,
+    onSuccess: () => {
+      notify.success('Landcover analysis complete')
+      queryClient.invalidateQueries({ queryKey: landcoverKeys.status })
+      queryClient.invalidateQueries({ queryKey: landcoverKeys.stats })
+    },
+    onError: (error) => {
+      notify.error('Landcover analysis failed', error instanceof Error ? error.message : 'Unknown error')
+    },
+  })
+}
+
+// ============================================
+// Terrain Query Hooks
+// ============================================
+
+/**
+ * 取得地形分析狀態 Hook
+ */
+export function useTerrainStatus() {
+  return useQuery({
+    queryKey: terrainKeys.status,
+    queryFn: fetchTerrainStatus,
+    enabled: !useMock(),
+    refetchInterval: 5000, // 每 5 秒更新一次狀態
+  })
+}
+
+/**
+ * 取得地形統計 Hook
+ */
+export function useTerrainStats() {
+  return useQuery({
+    queryKey: terrainKeys.stats,
+    queryFn: fetchTerrainStats,
+    enabled: !useMock(),
+  })
+}
+
+/**
+ * 執行地形分析 Hook
+ */
+export function useRunTerrain() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: runTerrainAnalysis,
+    onSuccess: () => {
+      notify.success('Terrain analysis complete')
+      queryClient.invalidateQueries({ queryKey: terrainKeys.status })
+      queryClient.invalidateQueries({ queryKey: terrainKeys.stats })
+    },
+    onError: (error) => {
+      notify.error('Terrain analysis failed', error instanceof Error ? error.message : 'Unknown error')
     },
   })
 }

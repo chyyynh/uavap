@@ -1,11 +1,13 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import type { DetectionObject, TiffMetadata } from '@/types/detection'
+import type { DetectionObject, TiffMetadata, LandcoverStats, TerrainStats } from '@/types/detection'
 
 interface PdfReportOptions {
   metadata: TiffMetadata
   mapImageBase64: string
   objects: DetectionObject[]
+  landcoverStats?: LandcoverStats | null
+  terrainStats?: TerrainStats | null
 }
 
 /**
@@ -157,7 +159,7 @@ function calculateSummary(objects: DetectionObject[]) {
  * 生成 PDF 報表
  */
 export async function generatePdfReport(options: PdfReportOptions): Promise<void> {
-  const { metadata, mapImageBase64, objects } = options
+  const { metadata, mapImageBase64, objects, landcoverStats, terrainStats } = options
   const summary = calculateSummary(objects)
 
   // 創建 A4 PDF
@@ -405,14 +407,225 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
     },
   })
 
+  // Get the final Y position after the table
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let currentY = (doc as any).lastAutoTable?.finalY || yPos + 50
+
   // ============================================
-  // 頁腳
+  // Landcover Statistics (if available)
   // ============================================
-  const footerY = pageHeight - 10
-  doc.setTextColor(148, 163, 184)
-  doc.setFontSize(8)
-  doc.text('UAV Automated Inspection Platform', margin, footerY)
-  doc.text(`Page 1`, pageWidth - margin - 10, footerY)
+  if (landcoverStats?.stats && Object.keys(landcoverStats.stats).length > 0) {
+    // Check if we need a new page
+    if (currentY > pageHeight - 80) {
+      doc.addPage()
+      currentY = margin
+    } else {
+      currentY += 10
+    }
+
+    doc.setTextColor(30, 41, 59)
+    doc.setFontSize(12)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Land Cover Analysis', margin, currentY)
+    currentY += 5
+
+    // Landcover labels
+    const LANDCOVER_LABELS: Record<string, string> = {
+      'bare-ground': 'Bare Ground',
+      'tree': 'Tree',
+      'road': 'Road',
+      'pavement': 'Pavement',
+      'grass': 'Grass',
+      'building': 'Building',
+    }
+
+    // Prepare table data sorted by percentage
+    const landcoverData = Object.entries(landcoverStats.stats)
+      .filter(([_, value]) => value.percentage > 0)
+      .sort((a, b) => b[1].percentage - a[1].percentage)
+      .map(([name, value]) => [
+        LANDCOVER_LABELS[name] || name,
+        value.pixels.toLocaleString(),
+        `${value.percentage.toFixed(2)}%`,
+      ])
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Class', 'Pixel Count', 'Percentage']],
+      body: landcoverData,
+      theme: 'striped',
+      headStyles: {
+        fillColor: [34, 139, 34], // Forest green for landcover
+        textColor: [255, 255, 255],
+        fontSize: 9,
+        fontStyle: 'bold',
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [51, 65, 85],
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252],
+      },
+      columnStyles: {
+        0: { cellWidth: 50 },
+        1: { cellWidth: 50, halign: 'right' },
+        2: { cellWidth: 40, halign: 'right' },
+      },
+      margin: { left: margin, right: margin },
+      styles: {
+        cellPadding: 3,
+      },
+    })
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    currentY = (doc as any).lastAutoTable?.finalY || currentY + 40
+  }
+
+  // ============================================
+  // Terrain Statistics (if available)
+  // ============================================
+  if (terrainStats) {
+    // Check if we need a new page
+    if (currentY > pageHeight - 100) {
+      doc.addPage()
+      currentY = margin
+    } else {
+      currentY += 10
+    }
+
+    doc.setTextColor(30, 41, 59)
+    doc.setFontSize(12)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Terrain Analysis', margin, currentY)
+    currentY += 8
+
+    // Elevation statistics
+    if (terrainStats.elevation) {
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Elevation', margin, currentY)
+      currentY += 5
+
+      const elevData = [
+        ['Minimum', `${fmt(terrainStats.elevation.min, 1)} m`],
+        ['Maximum', `${fmt(terrainStats.elevation.max, 1)} m`],
+        ['Mean', `${fmt(terrainStats.elevation.mean, 1)} m`],
+        ['Std Dev', `${fmt(terrainStats.elevation.std, 2)} m`],
+      ]
+
+      autoTable(doc, {
+        startY: currentY,
+        body: elevData,
+        theme: 'plain',
+        bodyStyles: {
+          fontSize: 8,
+          textColor: [51, 65, 85],
+        },
+        columnStyles: {
+          0: { cellWidth: 40, fontStyle: 'bold' },
+          1: { cellWidth: 40, halign: 'right' },
+        },
+        margin: { left: margin, right: margin },
+        styles: {
+          cellPadding: 2,
+        },
+      })
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      currentY = (doc as any).lastAutoTable?.finalY || currentY + 30
+    }
+
+    // Slope distribution
+    if (terrainStats.slope?.distribution) {
+      currentY += 5
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Slope Distribution', margin, currentY)
+      currentY += 5
+
+      const SLOPE_LABELS: Record<string, string> = {
+        flat: 'Flat (0-5°)',
+        gentle: 'Gentle (5-15°)',
+        moderate: 'Moderate (15-30°)',
+        steep: 'Steep (30°+)',
+      }
+
+      const slopeData = Object.entries(terrainStats.slope.distribution)
+        .map(([name, value]) => [
+          SLOPE_LABELS[name] || name,
+          `${value.percentage.toFixed(1)}%`,
+        ])
+
+      autoTable(doc, {
+        startY: currentY,
+        body: slopeData,
+        theme: 'plain',
+        bodyStyles: {
+          fontSize: 8,
+          textColor: [51, 65, 85],
+        },
+        columnStyles: {
+          0: { cellWidth: 50 },
+          1: { cellWidth: 30, halign: 'right' },
+        },
+        margin: { left: margin, right: margin },
+        styles: {
+          cellPadding: 2,
+        },
+      })
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      currentY = (doc as any).lastAutoTable?.finalY || currentY + 30
+    }
+
+    // Aspect distribution
+    if (terrainStats.aspect?.distribution) {
+      currentY += 5
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Aspect Distribution', margin, currentY)
+      currentY += 5
+
+      const aspectOrder = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+      const aspectData = aspectOrder.map((dir) => [
+        dir,
+        `${(terrainStats.aspect.distribution[dir]?.percentage || 0).toFixed(1)}%`,
+      ])
+
+      autoTable(doc, {
+        startY: currentY,
+        body: aspectData,
+        theme: 'plain',
+        bodyStyles: {
+          fontSize: 8,
+          textColor: [51, 65, 85],
+        },
+        columnStyles: {
+          0: { cellWidth: 30 },
+          1: { cellWidth: 30, halign: 'right' },
+        },
+        margin: { left: margin, right: margin },
+        styles: {
+          cellPadding: 2,
+        },
+        tableWidth: 80,
+      })
+    }
+  }
+
+  // ============================================
+  // 頁腳 (add to all pages)
+  // ============================================
+  const totalPages = doc.getNumberOfPages()
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i)
+    const footerY = pageHeight - 10
+    doc.setTextColor(148, 163, 184)
+    doc.setFontSize(8)
+    doc.text('UAV Automated Inspection Platform', margin, footerY)
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin - 20, footerY)
+  }
 
   // ============================================
   // 下載 PDF

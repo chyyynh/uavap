@@ -1,7 +1,7 @@
 import * as React from 'react'
 import type { Map as LeafletMap } from 'leaflet'
 import { generatePdfReport, captureMapImage } from '@/lib/pdf-generator'
-import type { DetectionObject, TiffMetadata } from '@/types/detection'
+import type { DetectionObject, TiffMetadata, LandcoverStats, TerrainStats } from '@/types/detection'
 import { notify } from '@/components/ui/sonner'
 import { getOrthoPreviewUrl } from '@/api/queries'
 
@@ -9,6 +9,8 @@ interface UsePdfExportOptions {
   mapRef: React.MutableRefObject<LeafletMap | null>
   objects: DetectionObject[]
   metadata: TiffMetadata | null | undefined
+  landcoverStats?: LandcoverStats | null
+  terrainStats?: TerrainStats | null
 }
 
 /**
@@ -72,7 +74,7 @@ async function fetchImageAsBase64(url: string): Promise<string> {
   })
 }
 
-export function usePdfExport({ mapRef, objects, metadata }: UsePdfExportOptions) {
+export function usePdfExport({ mapRef, objects, metadata, landcoverStats, terrainStats }: UsePdfExportOptions) {
   const [isExporting, setIsExporting] = React.useState(false)
 
   const exportPdf = React.useCallback(async () => {
@@ -137,6 +139,8 @@ export function usePdfExport({ mapRef, objects, metadata }: UsePdfExportOptions)
         metadata: effectiveMetadata,
         mapImageBase64,
         objects,
+        landcoverStats,
+        terrainStats,
       })
 
       notify.success('PDF exported', `${effectiveMetadata.filename.replace(/\.[^/.]+$/, '')}_report.pdf`)
@@ -146,7 +150,7 @@ export function usePdfExport({ mapRef, objects, metadata }: UsePdfExportOptions)
     } finally {
       setIsExporting(false)
     }
-  }, [mapRef, objects, metadata])
+  }, [mapRef, objects, metadata, landcoverStats, terrainStats])
 
   return {
     exportPdf,

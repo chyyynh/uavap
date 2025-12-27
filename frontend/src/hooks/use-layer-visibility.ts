@@ -15,6 +15,8 @@ export function useLayerVisibility(): UseLayerVisibilityReturn {
     base: true,
     ortho: true,
     landcover: false,
+    slope: false,
+    aspect: false,
     person: true,
     vehicle: true,
     cone: true,

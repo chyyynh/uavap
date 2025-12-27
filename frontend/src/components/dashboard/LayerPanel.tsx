@@ -16,7 +16,9 @@ interface LayerPanelProps {
 const LAYER_CONFIG: Array<{ key: keyof LayerVisibility; label: string; group?: string }> = [
   { key: 'base', label: 'Base Map', group: 'base' },
   { key: 'ortho', label: 'Orthophoto', group: 'base' },
-  { key: 'landcover', label: 'Land Cover', group: 'base' },
+  { key: 'landcover', label: 'Land Cover', group: 'analysis' },
+  { key: 'slope', label: 'Slope', group: 'terrain' },
+  { key: 'aspect', label: 'Aspect', group: 'terrain' },
   { key: 'person', label: 'Person', group: 'detections' },
   { key: 'vehicle', label: 'Vehicle', group: 'detections' },
   { key: 'cone', label: 'Cone', group: 'detections' },
@@ -52,7 +54,7 @@ function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
         <div className="border-t border-[var(--uav-stroke)] px-3 py-2">
           {LAYER_CONFIG.map((layer, index) => {
             const prevGroup = LAYER_CONFIG[index - 1]?.group
-            const showDivider = layer.group === 'detections' && prevGroup !== 'detections'
+            const showDivider = prevGroup && layer.group !== prevGroup
 
             return (
               <React.Fragment key={layer.key}>

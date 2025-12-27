@@ -8,9 +8,23 @@ import { DashboardLayout } from '@/components/dashboard/DashboardLayout'
 import { DetectionTaskCard } from '@/components/dashboard/DetectionTaskCard'
 import { DetectionSummaryCard } from '@/components/dashboard/DetectionSummaryCard'
 import { DetectionStatisticsCard } from '@/components/dashboard/DetectionStatisticsCard'
+import { LandcoverStatsCard } from '@/components/dashboard/LandcoverStatsCard'
+import { TerrainStatsCard } from '@/components/dashboard/TerrainStatsCard'
 import { ExportReportCard } from '@/components/dashboard/ExportReportCard'
 import { MapView } from '@/components/dashboard/MapView'
-import { useDetections, useOrthoBounds, getOrthoImageUrl, useTiffMetadata } from '@/api/queries'
+import {
+  useDetections,
+  useOrthoBounds,
+  getOrthoImageUrl,
+  useTiffMetadata,
+  getLandcoverOverlayUrl,
+  getSlopeImageUrl,
+  getAspectImageUrl,
+  useLandcoverStatus,
+  useLandcoverStats,
+  useTerrainStatus,
+  useTerrainStats,
+} from '@/api/queries'
 import { useProcessing } from '@/hooks/use-processing'
 import { useLayerVisibility } from '@/hooks/use-layer-visibility'
 import { usePdfExport } from '@/hooks/use-pdf-export'
@@ -31,13 +45,22 @@ function Dashboard() {
   const { data: objects = [] } = useDetections(selectedProjectId)
   const { data: orthoBounds } = useOrthoBounds()
   const { data: tiffMetadata } = useTiffMetadata()
+  const { data: landcoverStatus } = useLandcoverStatus()
+  const { data: landcoverStats } = useLandcoverStats()
+  const { data: terrainStatus } = useTerrainStatus()
+  const { data: terrainStats } = useTerrainStats()
   const orthoUrl = getOrthoImageUrl()
+  const landcoverUrl = landcoverStatus?.computed ? getLandcoverOverlayUrl() : null
+  const slopeUrl = terrainStatus?.computed ? getSlopeImageUrl() : null
+  const aspectUrl = terrainStatus?.computed ? getAspectImageUrl() : null
   const { isRunning, progress, elapsed, steps, currentStep, run } = useProcessing()
   const { visibility, toggle, enable } = useLayerVisibility()
   const { exportPdf, isExporting, canExport } = usePdfExport({
     mapRef,
     objects,
     metadata: tiffMetadata,
+    landcoverStats,
+    terrainStats,
   })
 
   const handleRun = React.useCallback(() => {
@@ -99,6 +122,8 @@ function Dashboard() {
             filter={filter}
             onFilterChange={setFilter}
           />
+          <LandcoverStatsCard />
+          <TerrainStatsCard />
           <ExportReportCard
             onExportPdf={exportPdf}
             isExporting={isExporting}
@@ -119,6 +144,9 @@ function Dashboard() {
         mapRef={mapRef}
         orthoBounds={orthoBounds}
         orthoUrl={orthoUrl}
+        landcoverUrl={landcoverUrl}
+        slopeUrl={slopeUrl}
+        aspectUrl={aspectUrl}
       />
     </DashboardLayout>
   )

@@ -42,12 +42,14 @@ export interface TaskOption {
   helpText?: string
 }
 
-export type LayerType = 'base' | 'ortho' | 'landcover' | 'person' | 'vehicle' | 'cone'
+export type LayerType = 'base' | 'ortho' | 'landcover' | 'slope' | 'aspect' | 'person' | 'vehicle' | 'cone'
 
 export interface LayerVisibility {
   base: boolean
   ortho: boolean
   landcover: boolean
+  slope: boolean
+  aspect: boolean
   person: boolean
   vehicle: boolean
   cone: boolean
@@ -79,4 +81,59 @@ export interface PdfReportData {
     vehicle: number
     cone: number
   }
+  landcover?: LandcoverStats
+  terrain?: TerrainStats
+}
+
+// Landcover types
+export interface LandcoverClassStats {
+  pixels: number
+  percentage: number
+}
+
+export interface LandcoverStats {
+  classes: Record<number, string>
+  colors: Record<string, number[]>
+  stats: Record<string, LandcoverClassStats>
+}
+
+export interface LandcoverStatus {
+  computed: boolean
+  has_stats: boolean
+}
+
+// Terrain types
+export interface TerrainElevationStats {
+  min: number
+  max: number
+  mean: number
+  std: number
+}
+
+export interface TerrainDistributionItem {
+  count: number
+  percentage: number
+}
+
+export interface TerrainSlopeStats {
+  min: number
+  max: number
+  mean: number
+  distribution: Record<string, TerrainDistributionItem>
+}
+
+export interface TerrainAspectStats {
+  distribution: Record<string, TerrainDistributionItem>
+}
+
+export interface TerrainStats {
+  elevation: TerrainElevationStats
+  slope: TerrainSlopeStats
+  aspect: TerrainAspectStats
+}
+
+export interface TerrainStatus {
+  computed: boolean
+  has_stats: boolean
+  dsm_loaded: boolean
 }

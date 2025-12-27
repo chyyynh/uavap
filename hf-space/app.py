@@ -155,6 +155,42 @@ upernet_cache = {"loaded": False, "model": None}
 landcover_cache = {"mask": None, "stats": None, "computed": False}
 processing_state = {"job_id": None, "status": "idle", "progress": 0, "current_step": "", "elapsed_seconds": 0, "results": [], "start_time": None}
 
+
+def cleanup_all():
+    """清除所有快取和刪除上傳的檔案"""
+    global uploaded_files, ortho_cache, pointcloud_cache, dsm_cache
+    global ref_ortho_cache, ref_dsm_cache, change_detection_cache
+    global landcover_cache, processing_state
+
+    # 關閉 rasterio 資源
+    if ortho_cache["src"] is not None:
+        try:
+            ortho_cache["src"].close()
+        except:
+            pass
+
+    # 刪除所有上傳的檔案
+    for key, filepath in uploaded_files.items():
+        if filepath and os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+                print(f"[Cleanup] Deleted: {filepath}")
+            except Exception as e:
+                print(f"[Cleanup] Failed to delete {filepath}: {e}")
+
+    # 重設所有快取
+    uploaded_files.update({"ortho": None, "laz": None, "dsm": None, "ortho_ref": None, "dsm_ref": None})
+    ortho_cache.update({"src": None, "transform": None, "crs": None, "bounds": None, "width": 0, "height": 0, "pixel_w": 0, "pixel_h": 0})
+    pointcloud_cache.update({"X": None, "Y": None, "Z": None, "loaded": False})
+    dsm_cache.update({"data": None, "transform": None, "crs": None, "loaded": False, "nodata": None})
+    ref_ortho_cache.update({"data": None, "transform": None, "loaded": False})
+    ref_dsm_cache.update({"data": None, "transform": None, "loaded": False})
+    change_detection_cache.update({"result": None, "computed": False})
+    landcover_cache.update({"mask": None, "stats": None, "computed": False})
+    processing_state.update({"job_id": None, "status": "idle", "progress": 0, "current_step": "", "elapsed_seconds": 0, "results": [], "start_time": None})
+
+    print("[Cleanup] All caches cleared")
+
 # ============================================
 # 資料模型
 # ============================================
@@ -777,6 +813,28 @@ async def upload_file(file: UploadFile = File(...)):
     filename = file.filename.lower()
     file_path = UPLOAD_DIR / file.filename
 
+    if filename.endswith((".tif", ".tiff")):
+        # 上傳新的 ortho 時，清除所有舊資料
+        cleanup_all()
+
+    # 刪除同類型的舊檔案
+    if filename.endswith((".tif", ".tiff")) and uploaded_files.get("ortho"):
+        old_path = uploaded_files["ortho"]
+        if old_path and os.path.exists(old_path) and old_path != str(file_path):
+            try:
+                os.remove(old_path)
+                print(f"[Upload] Deleted old ortho: {old_path}")
+            except:
+                pass
+    elif filename.endswith((".laz", ".las")) and uploaded_files.get("laz"):
+        old_path = uploaded_files["laz"]
+        if old_path and os.path.exists(old_path) and old_path != str(file_path):
+            try:
+                os.remove(old_path)
+                print(f"[Upload] Deleted old laz: {old_path}")
+            except:
+                pass
+
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
@@ -796,6 +854,18 @@ async def upload_dsm(file: UploadFile = File(...)):
     """上傳 DSM GeoTIFF 用於地形分析"""
     filename = file.filename.lower()
     file_path = UPLOAD_DIR / file.filename
+
+    # 刪除舊的 DSM 檔案
+    if uploaded_files.get("dsm"):
+        old_path = uploaded_files["dsm"]
+        if old_path and os.path.exists(old_path) and old_path != str(file_path):
+            try:
+                os.remove(old_path)
+                print(f"[Upload] Deleted old DSM: {old_path}")
+            except:
+                pass
+        # 重設 DSM 快取
+        dsm_cache.update({"data": None, "transform": None, "crs": None, "loaded": False, "nodata": None})
 
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
@@ -1047,3 +1117,10 @@ async def run_landcover():
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/cleanup")
+async def api_cleanup():
+    """清除所有上傳的檔案和快取"""
+    cleanup_all()
+    return {"status": "ok", "message": "All files and caches cleared"}
