@@ -153,6 +153,7 @@ function TaskSelectionSection() {
             <Switch
               checked={options[option.key]}
               onCheckedChange={(v) => setOption(option.key, v)}
+              className="data-checked:bg-[var(--uav-red)]/20 [&_[data-slot=switch-thumb]]:bg-white/70 [&_[data-slot=switch-thumb]]:data-checked:bg-[var(--uav-red)]"
             />
           </div>
         ))}

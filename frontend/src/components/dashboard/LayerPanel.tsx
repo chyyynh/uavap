@@ -2,14 +2,18 @@
 
 import * as React from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Layers01Icon } from '@hugeicons/core-free-icons'
+import { Layers01Icon, Moon02Icon, Sun03Icon, PaintBoardIcon } from '@hugeicons/core-free-icons'
 
 import { cn } from '@/lib/utils'
 import type { LayerVisibility } from '@/types/detection'
 
+export type MapTheme = 'dark' | 'light' | 'color'
+
 interface LayerPanelProps {
   visibility: LayerVisibility
   onToggle: (layer: keyof LayerVisibility) => void
+  mapTheme: MapTheme
+  onThemeChange: (theme: MapTheme) => void
 }
 
 interface LayerItem {
@@ -30,7 +34,7 @@ const LAYER_GROUPS: LayerGroup[] = [
     id: 'base',
     label: 'BASE',
     items: [
-      { key: 'base', label: 'Base Map', shortLabel: 'OSM', color: '#6b7280' },
+      { key: 'base', label: 'Base Map', shortLabel: 'MAP', color: '#6b7280' },
       { key: 'ortho', label: 'Orthophoto', shortLabel: 'ORTHO', color: '#8b5cf6' },
     ],
   },
@@ -116,7 +120,13 @@ function LayerIndicator({
   )
 }
 
-function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
+const THEME_OPTIONS = [
+  { key: 'dark' as MapTheme, label: 'Dark', icon: Moon02Icon },
+  { key: 'light' as MapTheme, label: 'Light', icon: Sun03Icon },
+  { key: 'color' as MapTheme, label: 'Color', icon: PaintBoardIcon },
+]
+
+function LayerPanel({ visibility, onToggle, mapTheme, onThemeChange }: LayerPanelProps) {
   const [isOpen, setIsOpen] = React.useState(true)
 
   const activeCount = Object.values(visibility).filter(Boolean).length
@@ -126,7 +136,7 @@ function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
     <div
       className={cn(
         'pointer-events-auto absolute left-3 top-3 z-[9999]',
-        'border border-white/[0.08] bg-black/90 backdrop-blur-md',
+        'border border-white/[0.12] bg-neutral-800/90 backdrop-blur-md',
         'shadow-[0_4px_24px_rgba(0,0,0,0.5)]',
         'transition-all duration-300'
       )}
@@ -211,6 +221,41 @@ function LayerPanel({ visibility, onToggle }: LayerPanelProps) {
               </div>
             </div>
           ))}
+
+          {/* Theme Selector */}
+          <div className="flex flex-col px-2 py-2">
+            <div className="mb-1.5 px-1.5">
+              <span className="text-[7px] font-semibold tracking-[0.15em] text-white/25">
+                THEME
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              {THEME_OPTIONS.map((theme) => (
+                <button
+                  key={theme.key}
+                  type="button"
+                  onClick={() => onThemeChange(theme.key)}
+                  className={cn(
+                    'group relative flex items-center gap-1.5 rounded-sm px-1.5 py-1 transition-all',
+                    'hover:bg-white/[0.06]',
+                    mapTheme === theme.key && 'bg-white/[0.03]'
+                  )}
+                  title={theme.label}
+                >
+                  <HugeiconsIcon
+                    icon={theme.icon}
+                    className={cn(
+                      'size-3 transition-colors duration-200',
+                      mapTheme === theme.key
+                        ? 'text-white/90'
+                        : 'text-white/30 group-hover:text-white/50'
+                    )}
+                    strokeWidth={1.5}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 

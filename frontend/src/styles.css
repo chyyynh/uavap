@@ -139,21 +139,21 @@
    ============================================ */
 
 .uav-dashboard {
-  /* Core palette - Ultra dark */
-  --noir-black: #0a0a0a;
-  --noir-dark: #111111;
-  --noir-surface: #161616;
-  --noir-elevated: #1a1a1a;
+  /* Core palette - Dark gray, not black */
+  --noir-black: #1a1a1a;
+  --noir-dark: #232323;
+  --noir-surface: #2a2a2a;
+  --noir-elevated: #333333;
 
   /* Panel backgrounds */
   --uav-bg: var(--noir-black);
-  --uav-panel: rgba(10, 10, 10, 0.95);
-  --uav-panel-elevated: rgba(18, 18, 18, 0.98);
-  --uav-glass: rgba(10, 10, 10, 0.85);
+  --uav-panel: rgba(32, 32, 32, 0.92);
+  --uav-panel-elevated: rgba(42, 42, 42, 0.95);
+  --uav-glass: rgba(28, 28, 28, 0.85);
 
-  /* Borders - Very subtle */
-  --uav-stroke: rgba(255, 255, 255, 0.08);
-  --uav-stroke-strong: rgba(255, 255, 255, 0.15);
+  /* Borders - Slightly more visible */
+  --uav-stroke: rgba(255, 255, 255, 0.12);
+  --uav-stroke-strong: rgba(255, 255, 255, 0.20);
   --uav-stroke-glow: rgba(229, 57, 53, 0.4);
 
   /* Text hierarchy */

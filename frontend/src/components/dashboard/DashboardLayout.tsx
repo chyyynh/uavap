@@ -55,7 +55,7 @@ function DashboardLayout({
         <div
           className={cn(
             'pointer-events-auto',
-            'border border-white/[0.08] bg-black/90 backdrop-blur-md',
+            'border border-white/[0.12] bg-neutral-800/90 backdrop-blur-md',
             'shadow-[0_4px_24px_rgba(0,0,0,0.5)]'
           )}
         >
@@ -96,7 +96,7 @@ function DashboardLayout({
                 <SelectTrigger className="h-auto gap-1.5 border-0 bg-transparent p-0 text-[11px] font-medium text-white/90 hover:text-white [&>svg]:size-2.5 [&>svg]:text-white/30">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="border-white/[0.08] bg-black/95 backdrop-blur-md">
+                <SelectContent className="border-white/[0.12] bg-neutral-800/85 backdrop-blur-md">
                   {projects.map((project) => (
                     <SelectItem
                       key={project.id}

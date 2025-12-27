@@ -30,8 +30,8 @@ function DashboardCard({
   return (
     <section
       className={cn(
-        'border border-white/[0.08] bg-black/90 backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.5)] p-3',
-        className
+        'bg-neutral-800/90 backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.5)] p-3',
+        className,
       )}
     >
       <div>
@@ -64,9 +64,7 @@ function DashboardCard({
         </div>
 
         {/* Content */}
-        <div>
-          {children}
-        </div>
+        <div>{children}</div>
       </div>
     </section>
   )

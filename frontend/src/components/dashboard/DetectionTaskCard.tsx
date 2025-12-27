@@ -153,41 +153,49 @@ function DetectionTaskCard({
 
           <TaskSelectionSection />
 
-          <div className="h-px bg-[var(--uav-stroke)]" />
+          {/* Processing Section - Only show when running or has progress */}
+          {(isRunning || progress > 0) ? (
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="border border-[var(--uav-red)] bg-[var(--uav-red)]/10 px-3 py-2.5">
+                <ProcessingSection
+                  steps={steps}
+                  progress={progress}
+                  elapsed={elapsed}
+                  currentStep={currentStep}
+                  isRunning={isRunning}
+                />
+              </div>
 
-          <ProcessingSection
-            steps={steps}
-            progress={progress}
-            elapsed={elapsed}
-            currentStep={currentStep}
-            isRunning={isRunning}
-          />
-
-          {/* Run Button - Noir style */}
-          <button
-            onClick={onRun}
-            disabled={isRunning}
-            className={cn(
-              'group relative w-full overflow-hidden py-3 font-medium tracking-wider transition-all duration-300',
-              isRunning
-                ? 'cursor-not-allowed border border-[var(--uav-stroke)] bg-[var(--uav-red)]/10 text-[var(--uav-red)]/60'
-                : 'border border-[var(--uav-red)] bg-[var(--uav-red)] text-white shadow-[0_0_20px_var(--uav-red-glow)] hover:shadow-[0_0_30px_var(--uav-red-glow)]'
-            )}
-          >
-            {/* Shine effect on hover */}
-            {!isRunning && (
+              {/* Show "Run Again" button after completion */}
+              {!isRunning && progress === 100 && (
+                <button
+                  onClick={onRun}
+                  className="mt-2 w-full border border-[var(--uav-stroke)] py-2 text-[10px] font-medium tracking-wider text-[var(--uav-text-secondary)] transition-all hover:border-[var(--uav-red)]/30 hover:text-[var(--uav-red)]"
+                >
+                  RUN AGAIN
+                </button>
+              )}
+            </div>
+          ) : (
+            /* Execute Button - Show when idle */
+            <button
+              onClick={onRun}
+              disabled={isRunning}
+              className="group relative w-full overflow-hidden py-3 font-medium tracking-wider transition-all duration-300 border border-[var(--uav-red)] bg-[var(--uav-red)] text-white shadow-[0_0_20px_var(--uav-red-glow)] hover:shadow-[0_0_30px_var(--uav-red-glow)]"
+            >
+              {/* Shine effect on hover */}
               <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-            )}
 
-            <span className="relative flex items-center justify-center gap-2 text-[11px]">
-              <HugeiconsIcon
-                icon={PlayIcon}
-                strokeWidth={2}
-                className={cn('size-4', isRunning && 'animate-pulse')}
-              />
-              {isRunning ? 'PROCESSING...' : 'EXECUTE DETECTION'}
-            </span>
-          </button>
+              <span className="relative flex items-center justify-center gap-2 text-[11px]">
+                <HugeiconsIcon
+                  icon={PlayIcon}
+                  strokeWidth={2}
+                  className="size-4"
+                />
+                EXECUTE DETECTION
+              </span>
+            </button>
+          )}
         </div>
       </DashboardCard>
     </TaskOptionsProvider>

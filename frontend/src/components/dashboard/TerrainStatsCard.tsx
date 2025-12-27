@@ -54,7 +54,10 @@ function TerrainStatsCard() {
   const fmt = (v: number | undefined) => (v === undefined ? '—' : v.toFixed(1))
 
   return (
-    <DashboardCard title="Terrain" helpText="Terrain elevation and slope analysis">
+    <DashboardCard
+      title="Terrain"
+      helpText="Terrain elevation and slope analysis"
+    >
       {status?.computed && stats ? (
         <div className="space-y-3">
           {/* Elevation Stats - Compact Grid */}
@@ -73,9 +76,13 @@ function TerrainStatsCard() {
                   <span
                     className={cn(
                       'font-mono text-base font-medium',
-                      item.accent ? 'text-[var(--uav-red)]' : 'text-white/90'
+                      item.accent ? 'text-[var(--uav-red)]' : 'text-white/90',
                     )}
-                    style={item.accent ? { textShadow: '0 0 8px var(--uav-red-glow)' } : undefined}
+                    style={
+                      item.accent
+                        ? { textShadow: '0 0 8px var(--uav-red-glow)' }
+                        : undefined
+                    }
                   >
                     {fmt(item.value)}
                   </span>
@@ -172,10 +179,14 @@ function TerrainStatsCard() {
                 'flex items-center gap-2 border px-3 py-1.5 text-[9px] font-medium uppercase tracking-wider transition-all',
                 isPending
                   ? 'cursor-not-allowed border-[var(--uav-stroke)] text-[var(--uav-text-tertiary)]'
-                  : 'border-[var(--uav-stroke)] text-[var(--uav-text-secondary)] hover:border-[var(--uav-red)]/30 hover:text-[var(--uav-red)]'
+                  : 'border-[var(--uav-stroke)] text-[var(--uav-text-secondary)] hover:border-[var(--uav-red)]/30 hover:text-[var(--uav-red)]',
               )}
             >
-              <HugeiconsIcon icon={PlayIcon} strokeWidth={2} className="size-3" />
+              <HugeiconsIcon
+                icon={PlayIcon}
+                strokeWidth={2}
+                className="size-3"
+              />
               {isPending ? 'Running...' : 'Execute'}
             </button>
           )}
