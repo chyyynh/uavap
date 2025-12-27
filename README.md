@@ -2,6 +2,15 @@
 
 無人機自動巡檢平台 (UAV Automated Inspection Platform) - 物件偵測與土地覆蓋分析儀表板
 
+## 功能特色
+
+- **物件偵測** - YOLO 模型偵測人員、車輛、交通錐
+- **土地覆蓋分析** - UPerNet 語意分割 (樹木、道路、建物等 6 類)
+- **地形分析** - DSM 計算坡度、坡向統計
+- **高程估算** - 點雲資料計算物件高度
+- **PDF 報告匯出** - 含圓餅圖、土地覆蓋圖、面積統計
+- **互動式地圖** - 多圖層切換、物件標註
+
 ## 技術架構
 
 ### 前端
@@ -11,12 +20,14 @@
 - **Styling**: Tailwind CSS v4
 - **Map**: react-leaflet
 - **State**: TanStack Query
+- **PDF**: jspdf + jspdf-autotable
 
-### 後端 (HuggingFace Spaces)
+### 後端
 
 - **Framework**: FastAPI
-- **Hosting**: HuggingFace Spaces (Docker)
+- **Hosting**: HuggingFace Spaces (Docker) 或 Google Colab (GPU)
 - **Models**: HuggingFace Hub
+- **圖片優化**: JPEG/PNG 壓縮 + HTTP 快取
 
 ## HuggingFace 資源
 
@@ -36,24 +47,23 @@
 
 ## 快速開始
 
-### 1. 安裝依賴
+### 方式一：使用 HuggingFace Spaces (CPU)
 
 ```bash
 cd frontend
 pnpm install
-```
-
-### 2. 啟動開發伺服器
-
-```bash
 pnpm dev
 ```
 
-### 3. 開啟瀏覽器
+前往 http://localhost:3000，預設連接 `https://chyyynh-uav-detection-api.hf.space`
 
-前往 http://localhost:3000
+### 方式二：使用 Google Colab (GPU，推薦)
 
-預設會連接 HuggingFace Spaces API：`https://chyyynh-uav-detection-api.hf.space`
+1. 開啟 `notebooks/uavap_colab.ipynb`
+2. 執行所有 Cell，等待 Cloudflare Tunnel URL
+3. 在前端 Dashboard 貼上 URL 連線
+
+> Colab GPU 版本推論速度更快，適合大型正射影像
 
 ## API 端點
 
@@ -74,12 +84,12 @@ pnpm dev
 
 ### 正射影像
 
-| 端點                  | 方法 | 說明                   |
-| --------------------- | ---- | ---------------------- |
-| `/api/ortho/bounds`   | GET  | 取得影像邊界 (WGS84)   |
-| `/api/ortho/image`    | GET  | 取得完整正射影像 (PNG) |
-| `/api/ortho/preview`  | GET  | 取得縮圖預覽           |
-| `/api/ortho/metadata` | GET  | 取得 TIFF 元資料       |
+| 端點                  | 方法 | 參數                      | 說明                             |
+| --------------------- | ---- | ------------------------- | -------------------------------- |
+| `/api/ortho/bounds`   | GET  | -                         | 取得影像邊界 (WGS84)             |
+| `/api/ortho/image`    | GET  | `max_width`, `quality=85` | 取得正射影像 (JPEG，含壓縮快取)  |
+| `/api/ortho/preview`  | GET  | `width`, `height`, `quality` | 取得縮圖預覽 (JPEG)           |
+| `/api/ortho/metadata` | GET  | -                         | 取得 TIFF 元資料 (含 pixel_w/h)  |
 
 ### 處理任務
 
@@ -106,21 +116,23 @@ pnpm dev
 
 ### 地形分析
 
-| 端點                       | 方法 | 說明                  |
-| -------------------------- | ---- | --------------------- |
-| `/api/terrain/status`      | GET  | DSM 載入狀態          |
-| `/api/terrain/stats`       | GET  | 地形統計 (坡度、坡向) |
-| `/api/terrain/point?x=&y=` | GET  | 指定座標的地形資訊    |
+| 端點                  | 方法 | 參數         | 說明                          |
+| --------------------- | ---- | ------------ | ----------------------------- |
+| `/api/terrain/status` | GET  | -            | DSM 載入狀態                  |
+| `/api/terrain/stats`  | GET  | -            | 地形統計 (坡度、坡向)         |
+| `/api/terrain/slope`  | GET  | `max_width`  | 坡度彩色圖 (PNG，terrain cmap)|
+| `/api/terrain/aspect` | GET  | `max_width`  | 坡向彩色圖 (PNG，HSV cmap)    |
+| `/api/terrain/run`    | POST | -            | 執行地形分析                  |
 
 ### 土地覆蓋 (UPerNet)
 
-| 端點                               | 方法 | 說明                        |
-| ---------------------------------- | ---- | --------------------------- |
-| `/api/landcover/status`            | GET  | 土地覆蓋計算狀態            |
-| `/api/landcover/stats`             | GET  | 各類別統計 (像素數、百分比) |
-| `/api/landcover/image`             | GET  | 彩色分割圖 (PNG)            |
-| `/api/landcover/overlay?alpha=0.5` | GET  | 正射影像疊加分割圖          |
-| `/api/landcover/run`               | POST | 單獨執行土地覆蓋偵測        |
+| 端點                   | 方法 | 參數                            | 說明                        |
+| ---------------------- | ---- | ------------------------------- | --------------------------- |
+| `/api/landcover/status`| GET  | -                               | 土地覆蓋計算狀態            |
+| `/api/landcover/stats` | GET  | -                               | 各類別統計 (像素數、百分比) |
+| `/api/landcover/image` | GET  | `max_width`                     | 彩色分割圖 (PNG，含快取)    |
+| `/api/landcover/overlay`| GET | `alpha=0.5`, `max_width`, `quality` | 正射影像疊加分割圖 (JPEG) |
+| `/api/landcover/run`   | POST | -                               | 單獨執行土地覆蓋偵測        |
 
 #### 土地覆蓋類別
 
@@ -143,18 +155,23 @@ pnpm dev
 
 ```
 uavap/
-├── frontend/              # React 前端
+├── frontend/                  # React 前端
 │   └── src/
-│       ├── api/           # TanStack Query hooks
-│       ├── components/    # UI 元件
-│       ├── contexts/      # React Context
-│       └── routes/        # 頁面路由
-├── hf-space/              # HuggingFace Spaces 後端
-│   ├── app.py             # FastAPI 應用
-│   ├── Dockerfile         # Docker 設定
-│   └── requirements.txt   # Python 依賴
-├── model/                 # 模型權重 (本地)
-└── notebooks/             # Jupyter notebooks
+│       ├── api/               # TanStack Query hooks
+│       ├── components/        # UI 元件
+│       │   ├── dashboard/     # Dashboard 專用元件
+│       │   └── ui/            # 通用 UI 元件
+│       ├── hooks/             # Custom hooks (PDF export 等)
+│       ├── lib/               # 工具函式 (PDF generator)
+│       ├── types/             # TypeScript 型別定義
+│       └── routes/            # 頁面路由
+├── hf-space/                  # HuggingFace Spaces 後端
+│   ├── app.py                 # FastAPI 應用 (CPU 版)
+│   ├── Dockerfile             # Docker 設定
+│   └── requirements.txt       # Python 依賴
+├── notebooks/
+│   └── uavap_colab.ipynb      # Colab GPU 版 API
+└── model/                     # 模型權重 (本地開發用)
 ```
 
 ## 檔案需求
@@ -165,7 +182,19 @@ uavap/
 | -------------- | ------------------------------------------- |
 | 基本物件偵測   | `odm_orthophoto.tif`                        |
 | + 高程與高度   | + `dsm.tif` + `odm_georeferenced_model.laz` |
-| + 地表變化偵測 | + `dsm.tif` (土地覆蓋使用 UPerNet)          |
+| + 地形分析     | + `dsm.tif` (計算坡度、坡向)                |
+| + 土地覆蓋     | (使用正射影像，UPerNet 分割)                |
+
+## 圖片優化
+
+所有圖片端點已優化以提升載入速度：
+
+| 圖片類型     | 格式 | 優化策略                                |
+| ------------ | ---- | --------------------------------------- |
+| 正射影像     | JPEG | `quality` 參數 (1-95)，LANCZOS 縮放     |
+| 土地覆蓋遮罩 | PNG  | NEAREST 重採樣 (保留類別值)             |
+| 地形圖       | PNG  | NEAREST 重採樣 + colormap               |
+| 所有端點     | -    | `Cache-Control: public, max-age=3600`   |
 
 ## License
 

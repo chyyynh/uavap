@@ -68,6 +68,8 @@ export interface TiffMetadata {
   width: number
   height: number
   crs?: string
+  pixel_w?: number  // Pixel width in meters (e.g., 0.05 = 5cm)
+  pixel_h?: number  // Pixel height in meters
 }
 
 export interface PdfReportData {

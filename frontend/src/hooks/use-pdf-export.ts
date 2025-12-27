@@ -3,7 +3,7 @@ import type { Map as LeafletMap } from 'leaflet'
 import { generatePdfReport, captureMapImage } from '@/lib/pdf-generator'
 import type { DetectionObject, TiffMetadata, LandcoverStats, TerrainStats } from '@/types/detection'
 import { notify } from '@/components/ui/sonner'
-import { getOrthoPreviewUrl } from '@/api/queries'
+import { getOrthoPreviewUrl, getLandcoverImageUrl } from '@/api/queries'
 
 interface UsePdfExportOptions {
   mapRef: React.MutableRefObject<LeafletMap | null>
@@ -126,6 +126,19 @@ export function usePdfExport({ mapRef, objects, metadata, landcoverStats, terrai
 
       console.log('[PDF Export] Final image base64 length:', mapImageBase64.length)
 
+      // Fetch landcover colorized image for PDF (if landcover stats available)
+      let landcoverImageBase64: string | null = null
+      const landcoverImageUrl = getLandcoverImageUrl()
+      if (landcoverImageUrl && landcoverStats) {
+        try {
+          console.log('[PDF Export] Fetching landcover image:', landcoverImageUrl)
+          landcoverImageBase64 = await fetchImageAsBase64(landcoverImageUrl)
+          console.log('[PDF Export] Got landcover image, length:', landcoverImageBase64.length)
+        } catch (e) {
+          console.warn('[PDF Export] Landcover image fetch failed:', e)
+        }
+      }
+
       // 使用實際 metadata 或預設值
       const effectiveMetadata: TiffMetadata = metadata ?? {
         filename: `detection_report_${new Date().toISOString().slice(0, 10)}`,
@@ -141,6 +154,7 @@ export function usePdfExport({ mapRef, objects, metadata, landcoverStats, terrai
         objects,
         landcoverStats,
         terrainStats,
+        landcoverImageBase64,
       })
 
       notify.success('PDF exported', `${effectiveMetadata.filename.replace(/\.[^/.]+$/, '')}_report.pdf`)

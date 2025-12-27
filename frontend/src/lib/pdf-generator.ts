@@ -8,6 +8,111 @@ interface PdfReportOptions {
   objects: DetectionObject[]
   landcoverStats?: LandcoverStats | null
   terrainStats?: TerrainStats | null
+  landcoverImageBase64?: string | null
+}
+
+// Landcover color mapping
+const LANDCOVER_COLORS: Record<string, string> = {
+  'bare-ground': '#deb887',
+  'tree': '#228b22',
+  'road': '#808080',
+  'pavement': '#b22222',
+  'grass': '#7cfc00',
+  'building': '#ff8c00',
+}
+
+const LANDCOVER_LABELS: Record<string, string> = {
+  'bare-ground': 'Bare Ground',
+  'tree': 'Tree',
+  'road': 'Road',
+  'pavement': 'Pavement',
+  'grass': 'Grass',
+  'building': 'Building',
+}
+
+/**
+ * Generate pie chart SVG for landcover distribution
+ */
+function generatePieChartSvg(
+  data: Array<{ name: string; value: number; fill: string }>,
+  width: number,
+  height: number
+): string {
+  const cx = width / 2
+  const cy = height / 2 - 20 // Leave space for legend at bottom
+  const radius = Math.min(cx, cy) - 10
+
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`
+  svg += `<rect width="${width}" height="${height}" fill="white"/>`
+
+  // Title
+  svg += `<text x="${cx}" y="20" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="bold" fill="#1e293b">Land Cover Distribution</text>`
+
+  let startAngle = -90 // Start from top
+  const total = data.reduce((sum, d) => sum + d.value, 0)
+
+  if (total === 0) {
+    svg += `<text x="${cx}" y="${cy}" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#64748b">No data</text>`
+    svg += `</svg>`
+    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)))
+  }
+
+  data.forEach((item) => {
+    if (item.value <= 0) return
+
+    const angle = (item.value / total) * 360
+    const endAngle = startAngle + angle
+
+    // Convert to radians
+    const startRad = (startAngle * Math.PI) / 180
+    const endRad = (endAngle * Math.PI) / 180
+
+    const x1 = cx + radius * Math.cos(startRad)
+    const y1 = cy + radius * Math.sin(startRad)
+    const x2 = cx + radius * Math.cos(endRad)
+    const y2 = cy + radius * Math.sin(endRad)
+    const largeArc = angle > 180 ? 1 : 0
+
+    // Draw arc path
+    svg += `<path d="M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z" fill="${item.fill}" stroke="white" stroke-width="1"/>`
+
+    // Add percentage label in the middle of the arc (for large enough slices)
+    if (item.value >= 5) {
+      const midAngle = ((startAngle + endAngle) / 2 * Math.PI) / 180
+      const labelRadius = radius * 0.65
+      const labelX = cx + labelRadius * Math.cos(midAngle)
+      const labelY = cy + labelRadius * Math.sin(midAngle)
+      svg += `<text x="${labelX}" y="${labelY}" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="white">${item.value.toFixed(0)}%</text>`
+    }
+
+    startAngle = endAngle
+  })
+
+  // Legend at bottom
+  const legendY = height - 45
+  const legendItemWidth = width / Math.min(data.length, 3)
+  let row = 0
+  data.filter(d => d.value > 0).forEach((item, i) => {
+    const col = i % 3
+    if (i > 0 && col === 0) row++
+    const legendX = 10 + col * legendItemWidth
+    const y = legendY + row * 18
+    svg += `<rect x="${legendX}" y="${y}" width="12" height="12" fill="${item.fill}" rx="2"/>`
+    svg += `<text x="${legendX + 16}" y="${y + 10}" font-family="sans-serif" font-size="10" fill="#374151">${item.name}</text>`
+  })
+
+  svg += `</svg>`
+  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)))
+}
+
+/**
+ * Format area with appropriate unit (m² or ha)
+ */
+function formatArea(areaM2: number): string {
+  if (areaM2 >= 10000) {
+    return `${(areaM2 / 10000).toFixed(2)} ha`
+  }
+  return `${areaM2.toFixed(2)} m²`
 }
 
 /**
@@ -159,7 +264,7 @@ function calculateSummary(objects: DetectionObject[]) {
  * 生成 PDF 報表
  */
 export async function generatePdfReport(options: PdfReportOptions): Promise<void> {
-  const { metadata, mapImageBase64, objects, landcoverStats, terrainStats } = options
+  const { metadata, mapImageBase64, objects, landcoverStats, terrainStats, landcoverImageBase64 } = options
   const summary = calculateSummary(objects)
 
   // 創建 A4 PDF
@@ -415,44 +520,119 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
   // Landcover Statistics (if available)
   // ============================================
   if (landcoverStats?.stats && Object.keys(landcoverStats.stats).length > 0) {
-    // Check if we need a new page
-    if (currentY > pageHeight - 80) {
-      doc.addPage()
-      currentY = margin
-    } else {
-      currentY += 10
+    // Always start landcover on a new page for better layout
+    doc.addPage()
+    currentY = margin
+
+    // Section header with green background
+    doc.setFillColor(34, 139, 34) // Forest green
+    doc.rect(0, 0, pageWidth, 35, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(16)
+    doc.setFont('helvetica', 'bold')
+    doc.text('Land Cover Analysis', margin, 22)
+    currentY = 45
+
+    // Calculate pixel area (default to 5cm = 0.05m resolution if not available)
+    const pixelW = metadata.pixel_w || 0.05
+    const pixelH = metadata.pixel_h || 0.05
+    const pixelArea = pixelW * pixelH // m² per pixel
+
+    // Show resolution info
+    doc.setTextColor(100, 116, 139)
+    doc.setFontSize(9)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Resolution: ${(pixelW * 100).toFixed(1)}cm x ${(pixelH * 100).toFixed(1)}cm per pixel`, margin, currentY)
+    currentY += 8
+
+    // === Pie Chart (left side) ===
+    const chartWidth = 80
+    const chartHeight = 90
+
+    // Prepare pie chart data
+    const pieData = Object.entries(landcoverStats.stats)
+      .filter(([_, v]) => v.percentage > 0)
+      .sort((a, b) => b[1].percentage - a[1].percentage)
+      .map(([name, v]) => ({
+        name: LANDCOVER_LABELS[name] || name,
+        value: v.percentage,
+        fill: LANDCOVER_COLORS[name] || '#888888',
+      }))
+
+    // Generate and add pie chart
+    const pieSvg = generatePieChartSvg(pieData, chartWidth * 3, chartHeight * 3)
+    try {
+      const piePng = await convertSvgToPng(pieSvg, chartWidth * 3, chartHeight * 3)
+      if (piePng) {
+        doc.addImage(piePng, 'PNG', margin, currentY, chartWidth, chartHeight)
+        console.log('[PDF Generator] Pie chart added successfully')
+      }
+    } catch (e) {
+      console.warn('[PDF Generator] Pie chart generation failed:', e)
     }
 
+    // === Landcover Image (right side) ===
+    if (landcoverImageBase64) {
+      const imgX = margin + chartWidth + 10
+      const imgWidth = contentWidth - chartWidth - 10
+      const imgHeight = chartHeight
+
+      // Image border
+      doc.setDrawColor(226, 232, 240)
+      doc.setLineWidth(0.5)
+      doc.rect(imgX, currentY, imgWidth, imgHeight)
+
+      try {
+        doc.addImage(landcoverImageBase64, 'PNG', imgX, currentY, imgWidth, imgHeight)
+        console.log('[PDF Generator] Landcover image added successfully')
+      } catch (e) {
+        console.warn('[PDF Generator] Landcover image failed:', e)
+        // Show placeholder
+        doc.setFillColor(248, 250, 252)
+        doc.rect(imgX, currentY, imgWidth, imgHeight, 'F')
+        doc.setTextColor(148, 163, 184)
+        doc.setFontSize(10)
+        doc.text('Landcover image unavailable', imgX + 20, currentY + imgHeight / 2)
+      }
+    }
+
+    currentY += chartHeight + 10
+
+    // === Area Statistics Table ===
     doc.setTextColor(30, 41, 59)
-    doc.setFontSize(12)
+    doc.setFontSize(11)
     doc.setFont('helvetica', 'bold')
-    doc.text('Land Cover Analysis', margin, currentY)
+    doc.text('Coverage Statistics', margin, currentY)
     currentY += 5
 
-    // Landcover labels
-    const LANDCOVER_LABELS: Record<string, string> = {
-      'bare-ground': 'Bare Ground',
-      'tree': 'Tree',
-      'road': 'Road',
-      'pavement': 'Pavement',
-      'grass': 'Grass',
-      'building': 'Building',
-    }
-
-    // Prepare table data sorted by percentage
-    const landcoverData = Object.entries(landcoverStats.stats)
+    // Prepare table data with area calculation
+    const landcoverTableData = Object.entries(landcoverStats.stats)
       .filter(([_, value]) => value.percentage > 0)
       .sort((a, b) => b[1].percentage - a[1].percentage)
-      .map(([name, value]) => [
-        LANDCOVER_LABELS[name] || name,
-        value.pixels.toLocaleString(),
-        `${value.percentage.toFixed(2)}%`,
-      ])
+      .map(([name, value]) => {
+        const areaM2 = value.pixels * pixelArea
+        return [
+          LANDCOVER_LABELS[name] || name,
+          value.pixels.toLocaleString(),
+          `${value.percentage.toFixed(2)}%`,
+          formatArea(areaM2),
+        ]
+      })
+
+    // Add total row
+    const totalPixels = Object.values(landcoverStats.stats).reduce((sum, v) => sum + v.pixels, 0)
+    const totalAreaM2 = totalPixels * pixelArea
+    landcoverTableData.push([
+      'Total',
+      totalPixels.toLocaleString(),
+      '100.00%',
+      formatArea(totalAreaM2),
+    ])
 
     autoTable(doc, {
       startY: currentY,
-      head: [['Class', 'Pixel Count', 'Percentage']],
-      body: landcoverData,
+      head: [['Class', 'Pixels', 'Percentage', 'Area']],
+      body: landcoverTableData,
       theme: 'striped',
       headStyles: {
         fillColor: [34, 139, 34], // Forest green for landcover
@@ -468,13 +648,21 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
         fillColor: [248, 250, 252],
       },
       columnStyles: {
-        0: { cellWidth: 50 },
-        1: { cellWidth: 50, halign: 'right' },
-        2: { cellWidth: 40, halign: 'right' },
+        0: { cellWidth: 45 },
+        1: { cellWidth: 40, halign: 'right' },
+        2: { cellWidth: 35, halign: 'right' },
+        3: { cellWidth: 40, halign: 'right' },
       },
       margin: { left: margin, right: margin },
       styles: {
         cellPadding: 3,
+      },
+      // Style the last row (Total) differently
+      didParseCell: (data) => {
+        if (data.row.index === landcoverTableData.length - 1) {
+          data.cell.styles.fontStyle = 'bold'
+          data.cell.styles.fillColor = [226, 232, 240]
+        }
       },
     })
 

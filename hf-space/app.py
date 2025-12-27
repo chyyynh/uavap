@@ -677,6 +677,67 @@ def compute_terrain_analysis():
     }
 
 
+def get_slope_colorized():
+    """取得彩色坡度圖 (terrain colormap)"""
+    if not dsm_cache["loaded"]:
+        return None
+
+    terrain = compute_terrain_analysis()
+    if terrain is None:
+        return None
+
+    slope = terrain["slope"]
+
+    # Normalize slope to 0-1 (cap at 60 degrees)
+    slope_norm = np.clip(slope / 60.0, 0, 1)
+
+    # Use a terrain-like colormap (green -> yellow -> brown -> white)
+    # Create RGB image
+    H, W = slope.shape
+    colored = np.zeros((H, W, 3), dtype=np.uint8)
+
+    # Green (flat) -> Yellow -> Orange -> Red -> Brown (steep)
+    colored[:, :, 0] = np.clip(slope_norm * 2 * 255, 0, 255).astype(np.uint8)  # R
+    colored[:, :, 1] = np.clip((1 - slope_norm) * 255, 0, 255).astype(np.uint8)  # G
+    colored[:, :, 2] = np.clip((1 - slope_norm * 2) * 128, 0, 128).astype(np.uint8)  # B
+
+    # Handle NaN as black
+    nan_mask = np.isnan(slope)
+    colored[nan_mask] = [0, 0, 0]
+
+    return colored
+
+
+def get_aspect_colorized():
+    """取得彩色坡向圖 (HSV colormap - direction as hue)"""
+    if not dsm_cache["loaded"]:
+        return None
+
+    terrain = compute_terrain_analysis()
+    if terrain is None:
+        return None
+
+    aspect = terrain["aspect"]
+
+    # Convert aspect to hue (0-360 -> 0-1)
+    hue = aspect / 360.0
+
+    # Create HSV image (full saturation and value)
+    H, W = aspect.shape
+    import colorsys
+
+    colored = np.zeros((H, W, 3), dtype=np.uint8)
+    for i in range(H):
+        for j in range(W):
+            if np.isnan(aspect[i, j]):
+                colored[i, j] = [0, 0, 0]
+            else:
+                r, g, b = colorsys.hsv_to_rgb(hue[i, j], 0.8, 0.9)
+                colored[i, j] = [int(r * 255), int(g * 255), int(b * 255)]
+
+    return colored
+
+
 def get_terrain_at_point(x, y):
     """取得特定座標的地形資訊"""
     if not dsm_cache["loaded"]:
@@ -754,8 +815,13 @@ async def get_ortho_bounds():
 
 
 @app.get("/api/ortho/image")
-async def get_ortho_image():
-    """取得完整正射影像 (PNG)"""
+async def get_ortho_image(max_width: int = None, quality: int = 85):
+    """取得正射影像 (JPEG with compression)
+
+    Args:
+        max_width: Optional max width for resizing (maintains aspect ratio)
+        quality: JPEG quality (1-95, default 85)
+    """
     if ortho_cache["src"] is None:
         raise HTTPException(status_code=404, detail="No image loaded")
 
@@ -767,14 +833,28 @@ async def get_ortho_image():
         data = ((data - data.min()) / (data.max() - data.min() + 1e-6) * 255).astype(np.uint8)
 
     img = Image.fromarray(data)
+
+    # Resize if max_width specified
+    if max_width and img.width > max_width:
+        ratio = max_width / img.width
+        new_height = int(img.height * ratio)
+        img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+
+    # Use JPEG with compression for photos
     buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
+    img.save(buffer, format="JPEG", quality=min(95, max(1, quality)), optimize=True)
     buffer.seek(0)
-    return Response(content=buffer.getvalue(), media_type="image/png")
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"}
+    )
 
 
 @app.get("/api/ortho/preview")
-async def get_ortho_preview(width: int = 800, height: int = 600):
+async def get_ortho_preview(width: int = 800, height: int = 600, quality: int = 85):
+    """取得正射影像預覽 (JPEG with compression)"""
     if ortho_cache["src"] is None:
         raise HTTPException(status_code=404, detail="No image loaded")
 
@@ -789,9 +869,14 @@ async def get_ortho_preview(width: int = 800, height: int = 600):
     img.thumbnail((width, height), Image.Resampling.LANCZOS)
 
     buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
+    img.save(buffer, format="JPEG", quality=min(95, max(1, quality)), optimize=True)
     buffer.seek(0)
-    return Response(content=buffer.getvalue(), media_type="image/png")
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"}
+    )
 
 
 @app.get("/api/ortho/metadata")
@@ -805,6 +890,8 @@ async def get_ortho_metadata():
         "width": src.width,
         "height": src.height,
         "crs": str(src.crs) if src.crs else None,
+        "pixel_w": ortho_cache["pixel_w"],  # Resolution in meters
+        "pixel_h": ortho_cache["pixel_h"],  # Resolution in meters
     }
 
 
@@ -1009,6 +1096,66 @@ async def get_terrain_at_location(x: float, y: float):
     return convert_numpy(result)
 
 
+@app.get("/api/terrain/slope")
+async def get_terrain_slope_image(max_width: int = None):
+    """取得坡度彩色圖 (PNG with compression)"""
+    if not dsm_cache["loaded"]:
+        raise HTTPException(status_code=400, detail="No DSM loaded")
+
+    from PIL import Image
+    color_img = get_slope_colorized()
+    if color_img is None:
+        raise HTTPException(status_code=500, detail="Failed to generate slope image")
+
+    img = Image.fromarray(color_img)
+
+    # Resize if max_width specified
+    if max_width and img.width > max_width:
+        ratio = max_width / img.width
+        new_height = int(img.height * ratio)
+        img = img.resize((max_width, new_height), Image.Resampling.NEAREST)
+
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG", optimize=True)
+    buffer.seek(0)
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"}
+    )
+
+
+@app.get("/api/terrain/aspect")
+async def get_terrain_aspect_image(max_width: int = None):
+    """取得坡向彩色圖 (PNG with compression)"""
+    if not dsm_cache["loaded"]:
+        raise HTTPException(status_code=400, detail="No DSM loaded")
+
+    from PIL import Image
+    color_img = get_aspect_colorized()
+    if color_img is None:
+        raise HTTPException(status_code=500, detail="Failed to generate aspect image")
+
+    img = Image.fromarray(color_img)
+
+    # Resize if max_width specified
+    if max_width and img.width > max_width:
+        ratio = max_width / img.width
+        new_height = int(img.height * ratio)
+        img = img.resize((max_width, new_height), Image.Resampling.NEAREST)
+
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG", optimize=True)
+    buffer.seek(0)
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"}
+    )
+
+
 @app.get("/api/export/stats")
 async def export_stats():
     results = convert_numpy(processing_state["results"])
@@ -1047,8 +1194,12 @@ async def get_landcover_stats():
 
 
 @app.get("/api/landcover/image")
-async def get_landcover_image():
-    """取得土地覆蓋彩色圖"""
+async def get_landcover_image(max_width: int = None):
+    """取得土地覆蓋彩色圖 (PNG with compression)
+
+    Args:
+        max_width: Optional max width for resizing
+    """
     if not landcover_cache["computed"]:
         raise HTTPException(status_code=400, detail="Landcover not computed yet")
 
@@ -1058,15 +1209,33 @@ async def get_landcover_image():
         raise HTTPException(status_code=500, detail="Failed to generate colorized landcover")
 
     img = Image.fromarray(color_img)
+
+    # Resize if max_width specified
+    if max_width and img.width > max_width:
+        ratio = max_width / img.width
+        new_height = int(img.height * ratio)
+        img = img.resize((max_width, new_height), Image.Resampling.NEAREST)  # Use NEAREST for segmentation masks
+
     buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
+    img.save(buffer, format="PNG", optimize=True)
     buffer.seek(0)
-    return Response(content=buffer.getvalue(), media_type="image/png")
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"}
+    )
 
 
 @app.get("/api/landcover/overlay")
-async def get_landcover_overlay(alpha: float = 0.5):
-    """取得土地覆蓋疊加圖（正射影像 + 土地覆蓋）"""
+async def get_landcover_overlay(alpha: float = 0.5, max_width: int = None, quality: int = 85):
+    """取得土地覆蓋疊加圖（正射影像 + 土地覆蓋, JPEG with compression）
+
+    Args:
+        alpha: Blend alpha for landcover overlay (0-1)
+        max_width: Optional max width for resizing
+        quality: JPEG quality (1-95, default 85)
+    """
     if not landcover_cache["computed"]:
         raise HTTPException(status_code=400, detail="Landcover not computed yet")
     if ortho_cache["src"] is None:
@@ -1096,10 +1265,22 @@ async def get_landcover_overlay(alpha: float = 0.5):
     blended = np.clip(blended, 0, 255).astype(np.uint8)
 
     img = Image.fromarray(blended)
+
+    # Resize if max_width specified
+    if max_width and img.width > max_width:
+        ratio = max_width / img.width
+        new_height = int(img.height * ratio)
+        img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+
     buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
+    img.save(buffer, format="JPEG", quality=min(95, max(1, quality)), optimize=True)
     buffer.seek(0)
-    return Response(content=buffer.getvalue(), media_type="image/png")
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"}
+    )
 
 
 @app.post("/api/landcover/run")

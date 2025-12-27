@@ -255,6 +255,15 @@ async function fetchLandcoverStats(): Promise<LandcoverStats | null> {
 }
 
 /**
+ * 取得土地覆蓋彩色圖 URL（用於 PDF 報告）
+ */
+export function getLandcoverImageUrl(): string | null {
+  const baseUrl = getApiBaseUrl()
+  if (!baseUrl) return null
+  return `${baseUrl}/api/landcover/image`
+}
+
+/**
  * 取得土地覆蓋疊加圖 URL
  */
 export function getLandcoverOverlayUrl(alpha = 0.5): string | null {
