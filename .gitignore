@@ -1,13 +1,23 @@
+# Frontend
 node_modules
-.DS_Store
 dist
 dist-ssr
 *.local
-count.txt
-.env
 .nitro
 .tanstack
 .wrangler
 .output
 .vinxi
+
+# Backend
+.venv
+__pycache__
+*.pyc
+uploads/
+backend/models/
+
+# System
+.DS_Store
+.env
+count.txt
 todos.json

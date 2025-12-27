@@ -1,0 +1,1117 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>UAV AIP Dashboard – Automated Inspection</title>
+
+  <!-- Leaflet (OpenStreetMap) -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel:#101c33;
+      --stroke:rgba(255,255,255,.08);
+      --text:rgba(255,255,255,.92);
+      --muted:rgba(255,255,255,.65);
+      --muted2:rgba(255,255,255,.45);
+      --accent:#ff9f2f;
+      --teal:#2dd4bf;
+      --shadow:0 12px 30px rgba(0,0,0,.35);
+      --radius2:22px;
+
+      --ui-font: sans-serif;
+      --brand-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", Arial, sans-serif;
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 600px at 30% -10%, rgba(70,120,255,.18), transparent 60%),
+                  radial-gradient(1000px 700px at 90% 20%, rgba(45,212,191,.12), transparent 55%),
+                  var(--bg);
+      color:var(--text);
+      font-family:var(--brand-font);
+    }
+
+    .topbar{
+      height:74px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:0 18px;
+      border-bottom:1px solid var(--stroke);
+      background: linear-gradient(180deg, rgba(16,28,51,.92), rgba(16,28,51,.65));
+      backdrop-filter: blur(10px);
+      position:sticky;
+      top:0;
+      z-index:1000;
+    }
+    .brand{display:flex;align-items:center;gap:14px;min-width:340px;}
+    .logo{
+      width:44px;height:44px;border-radius:10px;
+      background:linear-gradient(135deg, rgba(255,255,255,.18), rgba(255,255,255,.03));
+      border:1px solid var(--stroke);
+      box-shadow:var(--shadow);
+      display:grid;place-items:center;overflow:hidden;
+    }
+    .brandText{line-height:1.05;}
+    .brandText .title{font-size:22px;font-weight:700;letter-spacing:.2px;}
+    .brandText .subtitle{font-size:14px;color:var(--muted);margin-top:4px;}
+    .topControls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;}
+    .pill{
+      display:flex;align-items:center;gap:10px;
+      padding:10px 12px;border-radius:999px;
+      background: rgba(0,0,0,.22);border:1px solid var(--stroke);
+    }
+    .pill label{font-size:13px;color:var(--muted);white-space:nowrap;}
+    .topbar select{
+      appearance:none;border:1px solid var(--stroke);
+      background: rgba(255,255,255,.06);color:var(--text);
+      padding:8px 34px 8px 12px;border-radius:999px;
+      font-size:14px;outline:none;cursor:pointer;
+      background-image:
+        linear-gradient(45deg, transparent 50%, rgba(255,255,255,.65) 50%),
+        linear-gradient(135deg, rgba(255,255,255,.65) 50%, transparent 50%);
+      background-position: calc(100% - 16px) 14px, calc(100% - 10px) 14px;
+      background-size:6px 6px;background-repeat:no-repeat;
+      min-width:180px;
+    }
+    .gpuBadge{
+      font-size:13px;color:var(--text);
+      padding:10px 14px;border-radius:999px;
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.06);
+      white-space:nowrap;
+    }
+    .dot{width:9px;height:9px;border-radius:50%;
+      background:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,.14);
+      display:inline-block;margin-right:8px;
+    }
+
+    .layout{
+      display:grid;
+      grid-template-columns: 360px 1fr;
+      gap:16px;
+      padding:16px;
+      height: calc(100vh - 74px);
+    }
+
+    .sidebar{
+      display:flex;
+      flex-direction:column;
+      gap:14px;
+      overflow:auto;
+      padding-right:4px;
+      font-family: var(--ui-font);
+    }
+    .card{
+      background: linear-gradient(180deg, rgba(16,28,51,.92), rgba(16,28,51,.78));
+      border:1px solid var(--stroke);
+      border-radius: var(--radius2);
+      box-shadow: var(--shadow);
+      padding:16px;
+      overflow: visible; /* ✅ allow tooltip to escape card */
+    }
+    .sectionTitleRow{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+    }
+    .sectionTitle{
+      font-size:20px;
+      font-weight:700;
+      letter-spacing:.2px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .hint{
+      font-size:13px;
+      color:var(--muted);
+      line-height:1.5;
+      margin:0;
+      font-weight:400;
+    }
+
+    /* =========================================================
+       ✅ Larger + clearer "help" icon (same palette, different style)
+       - use circled "i" icon
+       - size increased, stroke thicker, subtle teal glow on hover
+       ========================================================= */
+    .helpBtn{
+      width:30px;height:30px;border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      display:grid;place-items:center;
+      cursor:pointer;
+      user-select:none;
+      flex:0 0 auto;
+      transition: background .12s ease, transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    }
+    .helpBtn:hover{
+      background: rgba(255,255,255,.10);
+      border-color: rgba(45,212,191,.22);
+      box-shadow: 0 0 0 4px rgba(45,212,191,.10);
+    }
+    .helpBtn:active{transform: translateY(1px)}
+    .ico{width:16px;height:16px;display:block}
+    .ico path, .ico circle{
+      stroke: rgba(255,255,255,.88);
+      stroke-width:2.2;
+      fill:none;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+
+    /* Generic icon button (for caret, layer button) */
+    .iconBtn{
+      width:28px;height:28px;border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      display:grid;place-items:center;
+      cursor:pointer;
+      user-select:none;
+      flex:0 0 auto;
+      transition: background .12s ease, transform .12s ease;
+    }
+    .iconBtn:hover{background: rgba(255,255,255,.10)}
+    .iconBtn:active{transform: translateY(1px)}
+    .caret{transition: transform .16s ease;}
+    .collapsed .caret{transform: rotate(-90deg);}
+
+    .subSection{border-top:1px solid rgba(255,255,255,.06); padding-top:12px; margin-top:10px;}
+    .subHeader{
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+      padding:8px 10px;border-radius:14px;
+      background: rgba(0,0,0,.12);
+      border:1px solid rgba(255,255,255,.06);
+      cursor:pointer;
+      user-select:none;
+    }
+    .subHeaderLeft{display:flex;align-items:center;gap:10px;min-width:0;}
+    .subLabel{font-size:16px;font-weight:400;color:rgba(255,255,255,.88)}
+    .subBody{padding:10px 8px 0 8px;}
+    .collapsed .subBody{display:none}
+
+    .runBar{
+      margin-top:12px;
+      width:100%;
+      border:none;
+      background: var(--accent);
+      color:#151515;
+      font-weight:700;
+      padding:12px 14px;
+      border-radius:14px;
+      cursor:pointer;
+      box-shadow: 0 10px 22px rgba(255,159,47,.20);
+      letter-spacing:.5px;
+    }
+    .runBar:active{transform: translateY(1px)}
+    .runBar[disabled]{opacity:.7; cursor:not-allowed}
+
+    .optRow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 2px;}
+    .optLeft{display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0;}
+    .chk{margin-top:2px;width:18px;height:18px;accent-color: var(--teal);cursor:pointer;}
+    .metaText{display:flex;align-items:center;gap:10px;min-width:0;}
+    .label{font-size:16px;font-weight:400;white-space:nowrap;}
+    .indent{padding-left:30px;}
+
+    /* =========================================================
+       ✅ Tooltip: render in a fixed overlay layer to avoid being
+       clipped by scrollbars / overflow areas.
+       - We'll place tooltip DOM into <div id="tipRoot"> fixed layer.
+       ========================================================= */
+    #tipRoot{
+      position:fixed;
+      inset:0;
+      pointer-events:none;
+      z-index:9999;
+    }
+    .tipPanelFixed{
+      position:fixed;
+      pointer-events:auto;
+      width:min(300px, calc(100vw - 24px));
+      max-width: calc(100vw - 24px);
+      background: rgba(10,16,28,.96);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:14px;
+      padding:10px 12px;
+      font-size:12.5px;
+      line-height:1.5;
+      color: rgba(255,255,255,.84);
+      box-shadow: 0 18px 40px rgba(0,0,0,.45);
+      display:none;
+    }
+    .tipPanelFixed code{color: rgba(255,255,255,.75)}
+    .tipPanelFixed .arrow{
+      position:absolute;
+      width:10px;height:10px;
+      background: rgba(10,16,28,.96);
+      border-left:1px solid rgba(255,255,255,.12);
+      border-top:1px solid rgba(255,255,255,.12);
+      transform: rotate(45deg);
+      top:-6px;
+      right:16px;
+    }
+
+    .tileGrid{display:grid;grid-template-columns: 1fr 1fr;gap:10px;}
+    .tile{
+      border:1px solid rgba(255,255,255,.08);
+      background: rgba(0,0,0,.18);
+      border-radius:16px;
+      padding:10px 12px;
+      min-height:60px;
+    }
+    .tile .k{font-size:12.5px;color:var(--muted);margin-bottom:6px;font-weight:400;}
+    .tile .v{font-size:18px;font-weight:400;}
+    .tile .sub{font-size:12px;color:var(--muted2);margin-top:4px;font-weight:400;}
+
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+    .pillMini{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      color:rgba(255,255,255,.85);
+      font-weight:400;
+    }
+    .sidebar select.miniSelect{
+      min-width:140px;
+      font-size:13px;
+      padding:7px 30px 7px 10px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      color:var(--text);
+      outline:none;
+      appearance:none;
+      background-image:
+        linear-gradient(45deg, transparent 50%, rgba(255,255,255,.65) 50%),
+        linear-gradient(135deg, rgba(255,255,255,.65) 50%, transparent 50%);
+      background-position: calc(100% - 16px) 12px, calc(100% - 10px) 12px;
+      background-size:6px 6px;
+      background-repeat:no-repeat;
+      font-weight:400;
+    }
+    .tableWrap{
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:14px;
+      overflow:auto;
+      background: rgba(0,0,0,.18);
+    }
+    table{width:100%;border-collapse:separate;border-spacing:0;min-width:780px;font-weight:400;}
+    th,td{padding:9px 10px;font-size:12.5px;border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap;font-weight:400;}
+    th{color:var(--muted);background: rgba(255,255,255,.04);position: sticky;top: 0;z-index: 2;}
+    tr:hover td{background: rgba(255,255,255,.03);}
+    tr.selected td{background: rgba(45,212,191,.08);}
+
+    .mapWrap{
+      position:relative;
+      border-radius: 22px;
+      border:1px solid var(--stroke);
+      overflow:hidden;
+      box-shadow: var(--shadow);
+      background: rgba(0,0,0,.16);
+    }
+    #map{width:100%;height:100%;min-height: 520px;}
+    .floating{
+      position:absolute;right:14px;top:14px;display:flex;gap:10px;
+      z-index:600;pointer-events:none;
+    }
+    .chip{
+      pointer-events:none;
+      padding:10px 12px;border-radius:999px;
+      background: rgba(16,28,51,.75);
+      border:1px solid var(--stroke);
+      color:var(--text);
+      font-size:13px;
+      backdrop-filter: blur(10px);
+    }
+
+    .layerPanel{
+      position:absolute;left:14px;top:14px;z-index:650;
+      width: 220px;
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(16,28,51,.78);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 12px 30px rgba(0,0,0,.35);
+      overflow:hidden;
+    }
+    .layerHeader{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .layerHeader .t{font-size:13px;color:rgba(255,255,255,.9);font-weight:400;}
+    .layerBody{padding:10px 12px; display:none;}
+    .layerPanel.open .layerBody{display:block;}
+    .layerItem{
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+      padding:7px 0;font-size:13px;color: rgba(255,255,255,.86);font-weight:400;
+    }
+    .switch{
+      width:40px;height:22px;border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      position:relative;cursor:pointer;flex:0 0 auto;
+    }
+    .switch::after{
+      content:"";
+      width:16px;height:16px;border-radius:50%;
+      background: rgba(255,255,255,.75);
+      position:absolute;top:2px;left:2px;
+      transition: transform .16s ease;
+    }
+    .switch.on{background: rgba(45,212,191,.14); border-color: rgba(45,212,191,.25);}
+    .switch.on::after{transform: translateX(18px); background: rgba(45,212,191,.85);}
+
+    .hoverCard{
+      position:absolute;
+      z-index:900;
+      pointer-events:none;
+      display:none;
+      min-width: 220px;
+      max-width: 280px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(10,16,28,.94);
+      box-shadow: 0 18px 40px rgba(0,0,0,.45);
+      padding:10px 12px;
+      font-size:12.5px;
+      color: rgba(255,255,255,.85);
+    }
+    .hoverCard .h{font-weight:600; margin-bottom:6px; color: rgba(255,255,255,.92);}
+    .hoverRow{display:flex;justify-content:space-between;gap:10px;padding:2px 0;}
+    .hoverRow .k{color: rgba(255,255,255,.55)}
+    .hoverRow .v{color: rgba(255,255,255,.88)}
+
+    @media (max-width: 980px){
+      .layout{grid-template-columns: 1fr; height:auto}
+      .brand{min-width:auto}
+      #map{height: 56vh}
+      .layerPanel{width: 240px;}
+    }
+  </style>
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" title="UAV AIP">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M7 8h10M9 6l-2 2 2 2M15 6l2 2-2 2" stroke="rgba(255,255,255,.9)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 9v7" stroke="rgba(255,255,255,.9)" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M9.5 16.5c.8.8 1.6 1.2 2.5 1.2s1.7-.4 2.5-1.2" stroke="rgba(255,255,255,.9)" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M6.2 11.2l-1.8 1.8M17.8 11.2l1.8 1.8" stroke="rgba(255,255,255,.65)" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="brandText">
+        <div class="title">Dashboard</div>
+        <div class="subtitle">UAV AIP Dashboard – Automated Inspection</div>
+      </div>
+    </div>
+
+    <div class="topControls">
+      <div class="pill">
+        <label>Project</label>
+        <select id="projectSelect">
+          <option>FUTAS_Test_Field</option>
+          <option>Harbor_Breakwater</option>
+          <option>Bridge_Inspection</option>
+        </select>
+      </div>
+
+      <div class="gpuBadge"><span class="dot"></span>GPU: RTX 3070 Ti</div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+
+      <!-- Detection Task -->
+      <section class="card">
+        <div class="sectionTitleRow">
+          <div class="sectionTitle">
+            Detection Task
+            <button class="helpBtn" type="button"
+              data-tip="選擇要偵測的物件類別與輸出項目。說明預設不顯示，按圖示才展開。"
+              aria-label="Help">
+              <!-- circled i -->
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M12 10v6"></path>
+                <path d="M12 7h.01"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Task Selection -->
+        <div class="subSection" id="subTaskSelection">
+          <div class="subHeader" data-collapse="taskSelection">
+            <div class="subHeaderLeft">
+              <div class="subLabel">Task Selection</div>
+              <button class="helpBtn" type="button"
+                data-tip="勾選想要的分析項目與輸出內容。進階說明可在地圖圖層或報表查看。"
+                aria-label="Help">
+                <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M12 10v6"></path>
+                  <path d="M12 7h.01"></path>
+                </svg>
+              </button>
+            </div>
+
+            <button class="iconBtn caret" type="button" aria-label="Toggle">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 10l4 4 4-4"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="subBody">
+            <div class="optRow">
+              <div class="optLeft">
+                <input class="chk" type="checkbox" id="optObjects" checked />
+                <div class="metaText">
+                  <div class="label">場域中的物件</div>
+                  <button class="helpBtn" type="button"
+                    data-tip="啟用物件偵測與屬性表輸出（bbox/center/score/class…）。"
+                    aria-label="Help">
+                    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9"></circle>
+                      <path d="M12 10v6"></path>
+                      <path d="M12 7h.01"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="optRow indent">
+              <div class="optLeft">
+                <input class="chk" type="checkbox" id="clsPerson" checked />
+                <div class="metaText"><div class="label">人</div></div>
+              </div>
+            </div>
+
+            <div class="optRow indent">
+              <div class="optLeft">
+                <input class="chk" type="checkbox" id="clsVehicle" checked />
+                <div class="metaText"><div class="label">車輛</div></div>
+              </div>
+            </div>
+
+            <div class="optRow indent">
+              <div class="optLeft">
+                <input class="chk" type="checkbox" id="clsCone" />
+                <div class="metaText"><div class="label">交通角錐</div></div>
+              </div>
+            </div>
+
+            <div class="optRow" style="margin-top:6px;">
+              <div class="optLeft">
+                <input class="chk" type="checkbox" id="optGeo" checked />
+                <div class="metaText">
+                  <div class="label">加算高程與高度（點雲/DSM）</div>
+                  <button class="helpBtn" type="button"
+                    data-tip="在屬性表新增：elev_z（中心點高程）、height_m（相對地面高度）。"
+                    aria-label="Help">
+                    <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="12" cy="12" r="9"></circle>
+                      <path d="M12 10v6"></path>
+                      <path d="M12 7h.01"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="optRow">
+              <div class="optLeft">
+                <input class="chk" type="checkbox" id="optChange" />
+                <div class="metaText"><div class="label">地表/地形變化（多期）</div></div>
+              </div>
+            </div>
+
+            <div class="optRow" style="margin-top:6px;">
+              <div class="optLeft">
+                <input class="chk" type="checkbox" id="optStats" checked />
+                <div class="metaText"><div class="label">統計摘要</div></div>
+              </div>
+            </div>
+
+            <div class="optRow">
+              <div class="optLeft">
+                <input class="chk" type="checkbox" id="optPDF" checked />
+                <div class="metaText"><div class="label">報表（PDF）</div></div>
+              </div>
+            </div>
+
+            <div class="optRow">
+              <div class="optLeft">
+                <input class="chk" type="checkbox" id="optGPKG" />
+                <div class="metaText"><div class="label">GIS 圖層（GeoPackage）</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Processing -->
+        <div class="subSection" id="subProcessing">
+          <div class="subHeader" data-collapse="processing">
+            <div class="subHeaderLeft">
+              <div class="subLabel">Processing</div>
+              <button class="helpBtn" type="button"
+                data-tip="顯示目前步驟、進度與耗時（示意）。可串接後端 log / websocket。"
+                aria-label="Help">
+                <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M12 10v6"></path>
+                  <path d="M12 7h.01"></path>
+                </svg>
+              </button>
+            </div>
+
+            <button class="iconBtn caret" type="button" aria-label="Toggle">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 10l4 4 4-4"></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="subBody">
+            <p class="hint" style="margin:0 0 10px 0;">
+              Progress: <span id="procProgress">0%</span> • Elapsed: <span id="procElapsed">0.0s</span>
+            </p>
+
+            <div class="tableWrap" style="min-width:0; overflow:hidden;">
+              <table style="min-width:0;">
+                <thead>
+                  <tr>
+                    <th style="width:34px;">#</th>
+                    <th>Step</th>
+                    <th style="width:120px;">Status</th>
+                    <th style="width:90px;">Elapsed</th>
+                  </tr>
+                </thead>
+                <tbody id="procTable">
+                  <tr><td>1</td><td>Semantic segmentation</td><td>Pending</td><td>—</td></tr>
+                  <tr><td>2</td><td>Object extraction</td><td>Pending</td><td>—</td></tr>
+                  <tr><td>3</td><td>Terrain / DSM sampling</td><td>Pending</td><td>—</td></tr>
+                  <tr><td>4</td><td>Object detection</td><td>Pending</td><td>—</td></tr>
+                  <tr><td>5</td><td>Height / volume analysis</td><td>Pending</td><td>—</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <button class="runBar" id="runBtn">RUN</button>
+      </section>
+
+      <!-- Detection summary -->
+      <section class="card">
+        <div class="sectionTitleRow">
+          <div class="sectionTitle">
+            Detection summary
+            <button class="helpBtn" type="button"
+              data-tip="顯示本次偵測的類別數量。詳細屬性請看 statistics。"
+              aria-label="Help">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M12 10v6"></path>
+                <path d="M12 7h.01"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="tileGrid">
+          <div class="tile">
+            <div class="k">Persons</div>
+            <div class="v" id="cntPerson">0</div>
+            <div class="sub">class: person</div>
+          </div>
+          <div class="tile">
+            <div class="k">Vehicles</div>
+            <div class="v" id="cntVehicle">0</div>
+            <div class="sub">class: vehicle</div>
+          </div>
+          <div class="tile">
+            <div class="k">Cones</div>
+            <div class="v" id="cntCone">0</div>
+            <div class="sub">class: cone</div>
+          </div>
+          <div class="tile">
+            <div class="k">Outputs</div>
+            <div class="v" style="font-size:14px;" id="outText">Stats + PDF</div>
+            <div class="sub" id="fieldText">+ elev_z / height_m</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Detection statistics -->
+      <section class="card">
+        <div class="sectionTitleRow">
+          <div class="sectionTitle">
+            Detection statistics
+            <button class="helpBtn" type="button"
+              data-tip="類似 QGIS 屬性表：可篩選類型、點選列同步地圖標記。"
+              aria-label="Help">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M12 10v6"></path>
+                <path d="M12 7h.01"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="pillMini">OBJECTS</div>
+          <select class="miniSelect" id="typeFilter">
+            <option value="all">All types</option>
+            <option value="person">person</option>
+            <option value="vehicle">vehicle</option>
+            <option value="cone">cone</option>
+          </select>
+        </div>
+
+        <div class="tableWrap">
+          <table aria-label="Objects attribute table">
+            <thead>
+              <tr>
+                <th style="width:46px;">id</th>
+                <th>class</th>
+                <th style="width:70px;">score</th>
+                <th style="width:120px;">center_x</th>
+                <th style="width:120px;">center_y</th>
+                <th style="width:90px;">area_m2</th>
+                <th style="width:110px;">aspect_rat</th>
+                <th style="width:90px;">elev_z</th>
+                <th style="width:90px;">height_m</th>
+              </tr>
+            </thead>
+            <tbody id="objTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Map -->
+    <section class="mapWrap">
+      <div class="floating">
+        <div class="chip" id="chipProject">Project: FUTAS_Test_Field</div>
+        <div class="chip" id="chipStatus">Status: Ready</div>
+      </div>
+
+      <div class="layerPanel" id="layerPanel">
+        <div class="layerHeader">
+          <div class="t">Layers</div>
+          <button class="iconBtn" id="layerToggle" type="button" aria-label="Toggle layers">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M8 10l4 4 4-4"/></svg>
+          </button>
+        </div>
+        <div class="layerBody">
+          <div class="layerItem"><span>Base map</span><span class="switch on" data-layer="base"></span></div>
+          <div class="layerItem"><span>Land cover</span><span class="switch" data-layer="landcover"></span></div>
+          <div class="layerItem"><span>Detections: Person</span><span class="switch" data-layer="person"></span></div>
+          <div class="layerItem"><span>Detections: Vehicle</span><span class="switch" data-layer="vehicle"></span></div>
+          <div class="layerItem"><span>Detections: Cone</span><span class="switch" data-layer="cone"></span></div>
+        </div>
+      </div>
+
+      <div id="map"></div>
+
+      <div class="hoverCard" id="hoverCard">
+        <div class="h" id="hoverTitle">vehicle</div>
+        <div class="hoverRow"><span class="k">ID</span><span class="v" id="hoverId">—</span></div>
+        <div class="hoverRow"><span class="k">Score</span><span class="v" id="hoverScore">—</span></div>
+        <div class="hoverRow"><span class="k">Area</span><span class="v" id="hoverArea">—</span></div>
+        <div class="hoverRow"><span class="k">Elev / Height</span><span class="v" id="hoverEH">—</span></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ✅ Fixed overlay for tooltips (not clipped by scrollbars) -->
+  <div id="tipRoot">
+    <div class="tipPanelFixed" id="tipPanelFixed">
+      <div class="arrow"></div>
+      <div id="tipContent"></div>
+    </div>
+  </div>
+
+  <script>
+    // =========================
+    // Helpers
+    // =========================
+    function fmt(v, d=3){
+      if(v === null || v === undefined) return "—";
+      if(typeof v === "number") return v.toFixed(d);
+      return String(v);
+    }
+
+    // =========================
+    // ✅ Tooltip system (fixed overlay)
+    // - avoids being clipped by sidebar scrollbars
+    // - positions BELOW the button if possible
+    // =========================
+    const tipFixed = document.getElementById("tipPanelFixed");
+    const tipContent = document.getElementById("tipContent");
+    let tipAnchor = null;
+
+    function hideTip(){
+      tipFixed.style.display = "none";
+      tipAnchor = null;
+    }
+
+    function showTip(btn){
+      const text = btn.getAttribute("data-tip") || "";
+      tipContent.textContent = text;
+
+      tipFixed.style.display = "block";
+      tipFixed.style.left = "0px";
+      tipFixed.style.top = "0px";
+
+      const br = btn.getBoundingClientRect();
+      const tr = tipFixed.getBoundingClientRect();
+      const pad = 12;
+
+      // Prefer below; if not enough space, place above
+      let left = br.right - tr.width;
+      let top  = br.bottom + 10;
+
+      // clamp horizontally
+      if(left < pad) left = pad;
+      if(left + tr.width > window.innerWidth - pad) left = window.innerWidth - pad - tr.width;
+
+      // if below out of screen, move above
+      if(top + tr.height > window.innerHeight - pad){
+        top = br.top - tr.height - 10;
+        if(top < pad) top = pad; // clamp
+      }
+
+      tipFixed.style.left = left + "px";
+      tipFixed.style.top  = top + "px";
+
+      // arrow position: align near anchor right edge (clamped)
+      const arrow = tipFixed.querySelector(".arrow");
+      const arrowRight = Math.max(16, Math.min(tr.width - 16, (left + tr.width) - br.right + 16));
+      arrow.style.right = arrowRight + "px";
+
+      tipAnchor = btn;
+    }
+
+    // Toggle on click
+    document.querySelectorAll("[data-tip]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if(tipAnchor === btn && tipFixed.style.display === "block"){
+          hideTip();
+        }else{
+          showTip(btn);
+        }
+      });
+    });
+
+    // Click outside closes
+    document.addEventListener("click", () => hideTip());
+    // Scroll/resize closes or repositions
+    window.addEventListener("resize", () => { if(tipAnchor) showTip(tipAnchor); });
+    document.querySelector(".sidebar").addEventListener("scroll", () => hideTip(), { passive:true });
+
+    // =========================
+    // Subsection collapse
+    // =========================
+    function toggleCollapse(key){
+      const root = key === "taskSelection"
+        ? document.getElementById("subTaskSelection")
+        : document.getElementById("subProcessing");
+      root.classList.toggle("collapsed");
+    }
+    document.querySelectorAll("[data-collapse]").forEach(el => {
+      el.addEventListener("click", () => toggleCollapse(el.getAttribute("data-collapse")));
+    });
+
+    // =========================
+    // Map init
+    // =========================
+    const map = L.map("map", { zoomControl: true }).setView([25.0476, 121.5329], 17);
+    const base = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 20,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+    L.control.scale({ imperial: false, metric: true }).addTo(map);
+
+    // Mock data
+    const objects = [
+      { id: 1,  cls: "vehicle", score: 0.924, center_x: 214297.40625, center_y: 2558033.7500, area_m2: 13.640625, aspect_rat: 1.4845356, elev_z: 36.2, height_m: 1.4, lat: 25.04761, lon: 121.53291 },
+      { id: 2,  cls: "vehicle", score: 0.924, center_x: 214283.84375, center_y: 2558021.5000, area_m2: 15.609375, aspect_rat: 1.2972969, elev_z: 36.0, height_m: 1.2, lat: 25.04758, lon: 121.53274 },
+      { id: 3,  cls: "vehicle", score: 0.914, center_x: 214276.53125, center_y: 2557982.0000, area_m2: 26.0546875, aspect_rat: 1.2689652, elev_z: 35.6, height_m: 1.0, lat: 25.04722, lon: 121.53320 },
+      { id: 4,  cls: "person",  score: 0.882, center_x: 214290.12000, center_y: 2558010.2400, area_m2: 0.380000, aspect_rat: 1.1000000, elev_z: 36.1, height_m: 1.7, lat: 25.04743, lon: 121.53266 },
+      { id: 5,  cls: "cone",    score: 0.801, center_x: 214289.22000, center_y: 2558008.1200, area_m2: 0.120000, aspect_rat: 0.9800000, elev_z: 36.1, height_m: 0.7, lat: 25.04745, lon: 121.53262 }
+    ];
+
+    const layerPerson = L.layerGroup();
+    const layerVehicle = L.layerGroup();
+    const layerCone = L.layerGroup();
+
+    const landcoverLayer = L.geoJSON({
+      "type":"FeatureCollection",
+      "features":[
+        {"type":"Feature","properties":{"class":"grass"},
+         "geometry":{"type":"Polygon","coordinates":[[
+          [121.53230,25.04730],[121.53230,25.04785],[121.53310,25.04785],[121.53310,25.04730],[121.53230,25.04730]
+         ]]}}
+      ]
+    }, { style: () => ({ weight: 1, opacity: 0.9, fillOpacity: 0.15 }) });
+
+    // Hover card
+    const hoverCard = document.getElementById("hoverCard");
+    const hoverTitle = document.getElementById("hoverTitle");
+    const hoverId = document.getElementById("hoverId");
+    const hoverScore = document.getElementById("hoverScore");
+    const hoverArea = document.getElementById("hoverArea");
+    const hoverEH = document.getElementById("hoverEH");
+
+    function showHover(o, clientX, clientY){
+      hoverTitle.textContent = o.cls;
+      hoverId.textContent = o.id;
+      hoverScore.textContent = fmt(o.score, 3);
+      hoverArea.textContent = fmt(o.area_m2, 3) + " m²";
+      hoverEH.textContent = `${fmt(o.elev_z,2)} m / ${fmt(o.height_m,2)} m`;
+
+      const wrap = document.querySelector(".mapWrap").getBoundingClientRect();
+      const pad = 12;
+      let x = clientX - wrap.left + 14;
+      let y = clientY - wrap.top + 14;
+
+      hoverCard.style.display = "block";
+      hoverCard.style.left = x + "px";
+      hoverCard.style.top = y + "px";
+
+      const r = hoverCard.getBoundingClientRect();
+      const maxX = wrap.width - r.width - pad;
+      const maxY = wrap.height - r.height - pad;
+      if(x > maxX) x = maxX;
+      if(y > maxY) y = maxY;
+      if(x < pad) x = pad;
+      if(y < pad) y = pad;
+
+      hoverCard.style.left = x + "px";
+      hoverCard.style.top = y + "px";
+    }
+    function hideHover(){ hoverCard.style.display = "none"; }
+
+    const markerById = new Map();
+    function buildMarkers(){
+      [layerPerson, layerVehicle, layerCone].forEach(l => l.clearLayers());
+      markerById.clear();
+
+      objects.forEach(o => {
+        const mk = L.circleMarker([o.lat, o.lon], { radius: 7, weight: 2, opacity: 0.9, fillOpacity: 0.35 });
+        mk.on("mouseover", (e) => { const oe = e.originalEvent; if(oe) showHover(o, oe.clientX, oe.clientY); });
+        mk.on("mousemove", (e) => { const oe = e.originalEvent; if(oe) showHover(o, oe.clientX, oe.clientY); });
+        mk.on("mouseout", hideHover);
+
+        mk.bindPopup(`
+          <b>${o.cls}</b><br/>
+          ID: ${o.id}<br/>
+          score: ${fmt(o.score,3)}<br/>
+          elev_z: ${fmt(o.elev_z,2)} m<br/>
+          height_m: ${fmt(o.height_m,2)} m
+        `);
+
+        markerById.set(o.id, mk);
+        if(o.cls === "person") layerPerson.addLayer(mk);
+        else if(o.cls === "vehicle") layerVehicle.addLayer(mk);
+        else if(o.cls === "cone") layerCone.addLayer(mk);
+      });
+    }
+    buildMarkers();
+
+    // Layer panel toggle
+    const layerPanel = document.getElementById("layerPanel");
+    const layerToggle = document.getElementById("layerToggle");
+    layerToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      layerPanel.classList.toggle("open");
+    });
+    document.addEventListener("click", (e) => {
+      if(!e.target.closest("#layerPanel")) layerPanel.classList.remove("open");
+    });
+
+    const layerMap = {
+      base: { on:true, add: () => base.addTo(map), remove: () => map.removeLayer(base) },
+      landcover: { on:false, add: () => landcoverLayer.addTo(map), remove: () => map.removeLayer(landcoverLayer) },
+      person: { on:false, add: () => layerPerson.addTo(map), remove: () => map.removeLayer(layerPerson) },
+      vehicle: { on:false, add: () => layerVehicle.addTo(map), remove: () => map.removeLayer(layerVehicle) },
+      cone: { on:false, add: () => layerCone.addTo(map), remove: () => map.removeLayer(layerCone) },
+    };
+    function setSwitch(el, on){ el.classList.toggle("on", !!on); }
+    document.querySelectorAll(".switch").forEach(sw => {
+      const key = sw.getAttribute("data-layer");
+      setSwitch(sw, layerMap[key]?.on);
+      sw.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const m = layerMap[key];
+        if(!m) return;
+        m.on = !m.on;
+        setSwitch(sw, m.on);
+        if(m.on) m.add(); else m.remove();
+      });
+    });
+
+    // Table render
+    const objTableEl = document.getElementById("objTable");
+    function renderTable(filter="all"){
+      objTableEl.innerHTML = "";
+      objects.filter(o => filter === "all" ? true : o.cls === filter).forEach(o => {
+        const tr = document.createElement("tr");
+        tr.dataset.id = o.id;
+        tr.innerHTML = `
+          <td>${o.id}</td>
+          <td>${o.cls}</td>
+          <td>${fmt(o.score, 3)}</td>
+          <td>${fmt(o.center_x, 5)}</td>
+          <td>${fmt(o.center_y, 4)}</td>
+          <td>${fmt(o.area_m2, 6)}</td>
+          <td>${fmt(o.aspect_rat, 10)}</td>
+          <td>${fmt(o.elev_z, 2)}</td>
+          <td>${fmt(o.height_m, 2)}</td>
+        `;
+        tr.addEventListener("click", () => {
+          document.querySelectorAll("#objTable tr").forEach(x => x.classList.remove("selected"));
+          tr.classList.add("selected");
+          const mk = markerById.get(o.id);
+          if(mk){
+            if(o.cls === "person" && !layerMap.person.on){ layerMap.person.on=true; layerMap.person.add(); document.querySelector('.switch[data-layer="person"]').classList.add("on"); }
+            if(o.cls === "vehicle" && !layerMap.vehicle.on){ layerMap.vehicle.on=true; layerMap.vehicle.add(); document.querySelector('.switch[data-layer="vehicle"]').classList.add("on"); }
+            if(o.cls === "cone" && !layerMap.cone.on){ layerMap.cone.on=true; layerMap.cone.add(); document.querySelector('.switch[data-layer="cone"]').classList.add("on"); }
+            mk.openPopup();
+            map.panTo(mk.getLatLng(), { animate:true });
+          }
+        });
+        objTableEl.appendChild(tr);
+      });
+    }
+
+    // Summary counts
+    function updateSummary(){
+      const count = (cls) => objects.filter(o => o.cls === cls).length;
+      document.getElementById("cntPerson").textContent = count("person");
+      document.getElementById("cntVehicle").textContent = count("vehicle");
+      document.getElementById("cntCone").textContent = count("cone");
+
+      const out = [];
+      if(document.getElementById("optStats").checked) out.push("Stats");
+      if(document.getElementById("optPDF").checked) out.push("PDF");
+      if(document.getElementById("optGPKG").checked) out.push("GPKG");
+      document.getElementById("outText").textContent = out.length ? out.join(" + ") : "None";
+
+      const geoOn = document.getElementById("optGeo").checked;
+      document.getElementById("fieldText").textContent = geoOn ? "+ elev_z / height_m" : "No elev/height";
+    }
+
+    // Events
+    document.getElementById("projectSelect").addEventListener("change", (e) => {
+      document.getElementById("chipProject").textContent = "Project: " + e.target.value;
+    });
+
+    document.getElementById("typeFilter").addEventListener("change", (e) => {
+      renderTable(e.target.value);
+    });
+
+    // simple parent-child: optObjects disable sub-classes
+    function syncObjectChildren(){
+      const enabled = document.getElementById("optObjects").checked;
+      ["clsPerson","clsVehicle","clsCone"].forEach(id => {
+        const el = document.getElementById(id);
+        el.disabled = !enabled;
+        if(!enabled) el.checked = false;
+      });
+    }
+    ["optObjects","clsPerson","clsVehicle","clsCone","optGeo","optChange","optStats","optPDF","optGPKG"].forEach(id=>{
+      document.getElementById(id).addEventListener("change", () => {
+        syncObjectChildren();
+        updateSummary();
+      });
+    });
+
+    // Processing simulation
+    const runBtn = document.getElementById("runBtn");
+    function setProcRow(i, status, elapsed){
+      const tr = document.querySelectorAll("#procTable tr")[i];
+      if(!tr) return;
+      tr.children[2].textContent = status;
+      tr.children[3].textContent = elapsed ?? "—";
+    }
+    function simulateProcessing(){
+      const start = performance.now();
+      const steps = [0.7,0.4,0.5,0.6,0.5];
+      let done = 0;
+      const tick = (idx) => {
+        if(idx >= steps.length) return;
+        setProcRow(idx, "Running", "—");
+        setTimeout(() => {
+          setProcRow(idx, "Done", steps[idx].toFixed(2) + "s");
+          done++;
+          document.getElementById("procProgress").textContent = Math.round(done/steps.length*100) + "%";
+          document.getElementById("procElapsed").textContent = ((performance.now()-start)/1000).toFixed(2) + "s";
+          if(idx+1 < steps.length) tick(idx+1);
+        }, steps[idx]*1000);
+      };
+      tick(0);
+    }
+
+    runBtn.addEventListener("click", () => {
+      document.getElementById("chipStatus").textContent = "Status: Running...";
+      runBtn.textContent = "RUNNING";
+      runBtn.disabled = true;
+
+      document.querySelectorAll("#procTable tr").forEach((tr) => {
+        tr.children[2].textContent = "Pending";
+        tr.children[3].textContent = "—";
+      });
+      document.getElementById("procProgress").textContent = "0%";
+      document.getElementById("procElapsed").textContent = "0.0s";
+
+      simulateProcessing();
+
+      setTimeout(() => {
+        document.getElementById("chipStatus").textContent = "Status: Done";
+        runBtn.textContent = "RUN";
+        runBtn.disabled = false;
+      }, 3200);
+    });
+
+    // Init
+    syncObjectChildren();
+    renderTable("all");
+    updateSummary();
+
+    map.on("movestart", hideHover);
+    map.on("zoomstart", hideHover);
+  </script>
+</body>
+</html>
+
+
+
