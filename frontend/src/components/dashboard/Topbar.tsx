@@ -4,7 +4,6 @@ import * as React from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   AirplaneModeIcon,
-  Upload04Icon,
   Link04Icon,
 } from '@hugeicons/core-free-icons'
 import { useQueryClient } from '@tanstack/react-query'
@@ -21,7 +20,6 @@ import { Button } from '@/components/ui/button'
 import {
   useProjects,
   useGpuStatus,
-  useUploadFile,
   setApiBaseUrl,
   getStoredApiUrl,
 } from '@/api/queries'
@@ -36,8 +34,6 @@ function Topbar({ className, onProjectChange, selectedProjectId }: TopbarProps) 
   const queryClient = useQueryClient()
   const { data: projects = [] } = useProjects()
   const { data: gpuStatus } = useGpuStatus()
-  const uploadMutation = useUploadFile()
-  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const [apiUrl, setApiUrl] = React.useState('')
   const [isConnected, setIsConnected] = React.useState(false)
@@ -63,20 +59,6 @@ function Topbar({ className, onProjectChange, selectedProjectId }: TopbarProps) 
     setApiBaseUrl(null)
     setIsConnected(false)
     queryClient.invalidateQueries()
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      uploadMutation.mutate(file)
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click()
   }
 
   return (
@@ -144,25 +126,6 @@ function Topbar({ className, onProjectChange, selectedProjectId }: TopbarProps) 
             </Button>
           )}
         </div>
-
-        {/* Upload - 支援 TIFF, DSM, LAZ */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".tif,.tiff,.jpg,.jpeg,.png,.dsm,.laz,.las"
-          onChange={handleFileChange}
-          className="hidden"
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={uploadMutation.isPending || !isConnected}
-          onClick={handleUploadClick}
-          className="gap-1.5 border-[var(--uav-stroke)] bg-white/4 text-[var(--uav-text)] hover:bg-white/8"
-        >
-          <HugeiconsIcon icon={Upload04Icon} className="size-3.5" strokeWidth={2} />
-          {uploadMutation.isPending ? 'Uploading...' : 'Upload'}
-        </Button>
 
         {/* Project Selector */}
         <div className="flex items-center gap-2 rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] px-2.5 py-1">

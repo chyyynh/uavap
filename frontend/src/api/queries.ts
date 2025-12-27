@@ -217,6 +217,8 @@ export interface ProcessingRequest {
   detect_vehicle: boolean
   detect_cone: boolean
   include_elevation: boolean
+  include_terrain: boolean
+  include_landcover: boolean
   output_stats: boolean
   output_pdf: boolean
   output_gpkg: boolean
@@ -243,25 +245,33 @@ export interface ProcessingStatusResponse {
 }
 
 /**
- * 上傳檔案（自動判斷類型：TIFF/DSM/LAZ）
+ * 上傳檔案參數
+ */
+export interface UploadFileParams {
+  file: File
+  fileType: 'ortho' | 'dsm' | 'laz'
+}
+
+/**
+ * 上傳檔案（根據類型選擇端點）
  */
 async function uploadFile(
-  file: File,
+  params: UploadFileParams,
 ): Promise<{ filename: string; message: string; type: string }> {
+  const { file, fileType } = params
+
   if (useMock()) {
     await new Promise((resolve) => setTimeout(resolve, 1000))
-    const ext = file.name.split('.').pop()?.toLowerCase()
-    let type = 'ortho'
-    if (ext === 'laz' || ext === 'las') type = 'laz'
-    else if (ext === 'dsm') type = 'dsm'
-    return { filename: file.name, message: '模擬上傳成功', type }
+    return { filename: file.name, message: '模擬上傳成功', type: fileType }
   }
 
   const formData = new FormData()
   formData.append('file', file)
 
   const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/upload`, {
+  // DSM 使用專屬端點，其他使用通用端點
+  const endpoint = fileType === 'dsm' ? '/api/upload/dsm' : '/api/upload'
+  const response = await fetch(`${baseUrl}${endpoint}`, {
     method: 'POST',
     body: formData,
   })
