@@ -21,3 +21,5 @@ backend/models/
 .env
 count.txt
 todos.json
+model/
+*.pth
