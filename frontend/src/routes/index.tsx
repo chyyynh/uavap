@@ -6,12 +6,11 @@ import type { Map as LeafletMap } from 'leaflet'
 
 import { DashboardLayout } from '@/components/dashboard/DashboardLayout'
 import { DetectionTaskCard } from '@/components/dashboard/DetectionTaskCard'
-import { DetectionSummaryCard } from '@/components/dashboard/DetectionSummaryCard'
-import { DetectionStatisticsCard } from '@/components/dashboard/DetectionStatisticsCard'
-import { LandcoverStatsCard } from '@/components/dashboard/LandcoverStatsCard'
-import { TerrainStatsCard } from '@/components/dashboard/TerrainStatsCard'
-import { ExportReportCard } from '@/components/dashboard/ExportReportCard'
-import { MapView } from '@/components/dashboard/MapView'
+import { RightSidePanel } from '@/components/dashboard/RightSidePanel'
+
+// Dynamic import to avoid SSR issues with leaflet
+const MapView = React.lazy(() => import('@/components/dashboard/MapView').then(mod => ({ default: mod.MapView })))
+import { useQueryClient } from '@tanstack/react-query'
 import {
   useDetections,
   useOrthoBounds,
@@ -24,6 +23,8 @@ import {
   useLandcoverStats,
   useTerrainStatus,
   useTerrainStats,
+  setForceFullMock,
+  isForceFullMock,
 } from '@/api/queries'
 import { useProcessing } from '@/hooks/use-processing'
 import { useLayerVisibility } from '@/hooks/use-layer-visibility'
@@ -38,9 +39,23 @@ function Dashboard() {
   const [selectedProjectId, setSelectedProjectId] = React.useState('current')
   const [selectedObjectId, setSelectedObjectId] = React.useState<number | null>(null)
   const [filter, setFilter] = React.useState<ObjectClass | 'all'>('all')
-  const [status, setStatus] = React.useState('Ready')
 
   const mapRef = React.useRef<LeafletMap | null>(null)
+  const queryClient = useQueryClient()
+
+  const isMockMode = selectedProjectId === 'mock'
+
+  if (isMockMode !== isForceFullMock()) {
+    setForceFullMock(isMockMode)
+  }
+
+  const prevMockModeRef = React.useRef(isMockMode)
+  React.useLayoutEffect(() => {
+    if (prevMockModeRef.current !== isMockMode) {
+      prevMockModeRef.current = isMockMode
+      queryClient.resetQueries()
+    }
+  }, [isMockMode, queryClient])
 
   const { data: objects = [] } = useDetections(selectedProjectId)
   const { data: orthoBounds } = useOrthoBounds()
@@ -64,16 +79,8 @@ function Dashboard() {
   })
 
   const handleRun = React.useCallback(() => {
-    setStatus('Running...')
     run()
   }, [run])
-
-  // 當處理完成時更新狀態
-  React.useEffect(() => {
-    if (!isRunning && progress === 100) {
-      setStatus('Done')
-    }
-  }, [isRunning, progress])
 
   const handleSelectObject = React.useCallback(
     (id: number) => {
@@ -91,63 +98,49 @@ function Dashboard() {
     [objects, enable]
   )
 
-  const projectName = React.useMemo(() => {
-    const names: Record<string, string> = {
-      futas: 'FUTAS_Test_Field',
-      harbor: 'Harbor_Breakwater',
-      bridge: 'Bridge_Inspection',
-    }
-    return names[selectedProjectId] || selectedProjectId
-  }, [selectedProjectId])
-
   return (
     <DashboardLayout
       selectedProjectId={selectedProjectId}
       onProjectChange={setSelectedProjectId}
-      sidebar={
-        <>
-          <DetectionTaskCard
-            onRun={handleRun}
-            isRunning={isRunning}
-            steps={steps}
-            progress={progress}
-            elapsed={elapsed}
-            currentStep={currentStep}
-          />
-          <DetectionSummaryCard objects={objects} />
-          <DetectionStatisticsCard
-            objects={objects}
-            selectedId={selectedObjectId}
-            onSelectRow={handleSelectObject}
-            filter={filter}
-            onFilterChange={setFilter}
-          />
-          <LandcoverStatsCard />
-          <TerrainStatsCard />
-          <ExportReportCard
-            onExportPdf={exportPdf}
-            isExporting={isExporting}
-            canExport={canExport}
-            hasResults={objects.length > 0}
-          />
-        </>
+      isMockMode={isMockMode}
+      bottomLeftPanel={
+        <DetectionTaskCard
+          onRun={handleRun}
+          isRunning={isRunning}
+          steps={steps}
+          progress={progress}
+          elapsed={elapsed}
+          currentStep={currentStep}
+        />
+      }
+      rightPanel={
+        <RightSidePanel
+          objects={objects}
+          selectedObjectId={selectedObjectId}
+          onSelectObject={handleSelectObject}
+          filter={filter}
+          onFilterChange={setFilter}
+          onExportPdf={exportPdf}
+          isExporting={isExporting}
+          canExport={canExport}
+        />
       }
     >
-      <MapView
-        objects={objects}
-        projectName={projectName}
-        status={status}
-        layerVisibility={visibility}
-        onLayerToggle={toggle}
-        selectedObjectId={selectedObjectId}
-        onSelectObject={handleSelectObject}
-        mapRef={mapRef}
-        orthoBounds={orthoBounds}
-        orthoUrl={orthoUrl}
-        landcoverUrl={landcoverUrl}
-        slopeUrl={slopeUrl}
-        aspectUrl={aspectUrl}
-      />
+      <React.Suspense fallback={<div className="flex h-full w-full items-center justify-center bg-[var(--uav-bg)]"><span className="text-[var(--uav-text-tertiary)]">Loading map...</span></div>}>
+        <MapView
+          objects={objects}
+          layerVisibility={visibility}
+          onLayerToggle={toggle}
+          selectedObjectId={selectedObjectId}
+          onSelectObject={handleSelectObject}
+          mapRef={mapRef}
+          orthoBounds={orthoBounds}
+          orthoUrl={orthoUrl}
+          landcoverUrl={landcoverUrl}
+          slopeUrl={slopeUrl}
+          aspectUrl={aspectUrl}
+        />
+      </React.Suspense>
     </DashboardLayout>
   )
 }

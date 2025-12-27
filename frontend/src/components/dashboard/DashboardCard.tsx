@@ -1,3 +1,5 @@
+'use client'
+
 import * as React from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { InformationCircleIcon } from '@hugeicons/core-free-icons'
@@ -28,35 +30,44 @@ function DashboardCard({
   return (
     <section
       className={cn(
-        'rounded-[var(--uav-radius)] border border-[var(--uav-stroke)] bg-[var(--uav-panel)] p-4',
+        'border border-white/[0.08] bg-black/90 backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.5)] p-3',
         className
       )}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold text-[var(--uav-text)]">
-            {title}
-          </h2>
-          {helpText && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <IconButton variant="help" size="sm" aria-label="Help">
-                    <HugeiconsIcon
-                      icon={InformationCircleIcon}
-                      strokeWidth={2}
-                      className="size-3.5"
-                    />
-                  </IconButton>
-                }
-              />
-              <TooltipContent>{helpText}</TooltipContent>
-            </Tooltip>
-          )}
+      <div>
+        {/* Header */}
+        <div className="mb-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[9px] font-semibold tracking-[0.15em] text-white/50">
+              {title.toUpperCase()}
+            </h2>
+            {helpText && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <IconButton variant="help" size="sm" aria-label="Help">
+                      <HugeiconsIcon
+                        icon={InformationCircleIcon}
+                        strokeWidth={2}
+                        className="size-3 text-[var(--uav-text-tertiary)]"
+                      />
+                    </IconButton>
+                  }
+                />
+                <TooltipContent className="noir-panel border-[var(--uav-stroke)] bg-[var(--uav-panel)] text-xs text-[var(--uav-text)]">
+                  {helpText}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+          {action}
         </div>
-        {action}
+
+        {/* Content */}
+        <div>
+          {children}
+        </div>
       </div>
-      {children}
     </section>
   )
 }

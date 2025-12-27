@@ -21,57 +21,93 @@ interface DetectionTableProps {
   onSelectRow: (id: number) => void
 }
 
-function fmt(v: number | null | undefined, decimals = 3): string {
-  if (v === null || v === undefined) return '—'
+const CLASS_COLORS: Record<string, string> = {
+  person: '#3b82f6',
+  vehicle: '#f97316',
+  cone: '#eab308',
+}
+
+function fmt(v: number | null | undefined, decimals = 2): string {
+  if (v === null || v === undefined) return '--'
   return v.toFixed(decimals)
+}
+
+function ClassBadge({ value }: { value: string }) {
+  const color = CLASS_COLORS[value] || '#888'
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-[9px] font-medium uppercase tracking-wider"
+      style={{ color }}
+    >
+      <span
+        className="size-1.5 rounded-full"
+        style={{ backgroundColor: color }}
+      />
+      {value.slice(0, 3)}
+    </span>
+  )
+}
+
+function ConfidenceBar({ value }: { value: number }) {
+  const pct = Math.round(value * 100)
+  const color = pct >= 80 ? '#4caf50' : pct >= 50 ? '#ffc107' : '#e53935'
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="relative h-1 w-10 overflow-hidden bg-white/[0.05]">
+        <div
+          className="absolute inset-y-0 left-0"
+          style={{ width: `${pct}%`, backgroundColor: color }}
+        />
+      </div>
+      <span className="font-mono text-[9px]" style={{ color }}>
+        {pct}
+      </span>
+    </div>
+  )
 }
 
 const columns: ColumnDef<DetectionObject>[] = [
   {
     accessorKey: 'id',
-    header: 'ID',
-    size: 50,
+    header: '#',
+    size: 32,
+    cell: ({ getValue }) => (
+      <span className="font-mono text-[9px] text-[var(--uav-text-tertiary)]">
+        {getValue() as number}
+      </span>
+    ),
   },
   {
     accessorKey: 'cls',
-    header: 'Class',
-    size: 80,
+    header: 'CLASS',
+    size: 56,
+    cell: ({ getValue }) => <ClassBadge value={getValue() as string} />,
   },
   {
     accessorKey: 'score',
-    header: 'Score',
-    size: 70,
-    cell: ({ getValue }) => fmt(getValue() as number, 3),
+    header: 'CONF',
+    size: 72,
+    cell: ({ getValue }) => <ConfidenceBar value={getValue() as number} />,
   },
   {
     accessorKey: 'center_x',
-    header: 'Center X',
-    size: 100,
-    cell: ({ getValue }) => fmt(getValue() as number, 5),
+    header: 'X',
+    size: 56,
+    cell: ({ getValue }) => (
+      <span className="font-mono text-[9px] text-[var(--uav-text-tertiary)]">
+        {fmt(getValue() as number, 1)}
+      </span>
+    ),
   },
   {
     accessorKey: 'center_y',
-    header: 'Center Y',
-    size: 100,
-    cell: ({ getValue }) => fmt(getValue() as number, 4),
-  },
-  {
-    accessorKey: 'area_m2',
-    header: 'Area (m²)',
-    size: 90,
-    cell: ({ getValue }) => fmt(getValue() as number, 2),
-  },
-  {
-    accessorKey: 'elev_z',
-    header: 'Elev Z',
-    size: 80,
-    cell: ({ getValue }) => fmt(getValue() as number, 2),
-  },
-  {
-    accessorKey: 'height_m',
-    header: 'Height',
-    size: 80,
-    cell: ({ getValue }) => fmt(getValue() as number, 2),
+    header: 'Y',
+    size: 56,
+    cell: ({ getValue }) => (
+      <span className="font-mono text-[9px] text-[var(--uav-text-tertiary)]">
+        {fmt(getValue() as number, 1)}
+      </span>
+    ),
   },
 ]
 
@@ -91,66 +127,65 @@ function DetectionTable({
     getSortedRowModel: getSortedRowModel(),
   })
 
-  return (
-    <div className="overflow-auto rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)]">
-      <table className="w-full border-collapse text-xs">
-        <thead>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="border-b border-[var(--uav-stroke)]">
-              {headerGroup.headers.map((header) => (
-                <th
-                  key={header.id}
-                  className={cn(
-                    'whitespace-nowrap px-2.5 py-2 text-left font-medium text-[var(--uav-text-tertiary)]',
-                    header.column.getCanSort() && 'cursor-pointer select-none hover:text-[var(--uav-text-secondary)]'
-                  )}
-                  style={{ width: header.getSize() }}
-                  onClick={header.column.getToggleSortingHandler()}
-                >
-                  <div className="flex items-center gap-1">
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                    {header.column.getIsSorted() === 'asc' && (
-                      <HugeiconsIcon icon={ArrowUp01Icon} className="size-3" strokeWidth={2} />
-                    )}
-                    {header.column.getIsSorted() === 'desc' && (
-                      <HugeiconsIcon icon={ArrowDown01Icon} className="size-3" strokeWidth={2} />
-                    )}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {table.getRowModel().rows.map((row) => (
-            <tr
-              key={row.id}
-              onClick={() => onSelectRow(row.original.id)}
-              className={cn(
-                'cursor-pointer border-b border-[var(--uav-stroke)] transition-colors last:border-b-0',
-                'hover:bg-white/4',
-                selectedId === row.original.id && 'bg-[var(--uav-teal)]/10'
-              )}
-            >
-              {row.getVisibleCells().map((cell) => (
-                <td
-                  key={cell.id}
-                  className="whitespace-nowrap px-2.5 py-2 text-[var(--uav-text)]"
-                >
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+  if (objects.length === 0) {
+    return (
+      <div className="py-6 text-center">
+        <span className="text-[10px] tracking-wider text-[var(--uav-text-tertiary)]">
+          NO DATA AVAILABLE
+        </span>
+      </div>
+    )
+  }
 
-      {objects.length === 0 && (
-        <div className="py-8 text-center text-sm text-[var(--uav-text-tertiary)]">
-          No detection results
-        </div>
-      )}
-    </div>
+  return (
+    <table className="w-full border-collapse">
+      <thead>
+        {table.getHeaderGroups().map((headerGroup) => (
+          <tr key={headerGroup.id} className="border-b border-[var(--uav-stroke)]">
+            {headerGroup.headers.map((header) => (
+              <th
+                key={header.id}
+                className={cn(
+                  'px-2 py-2 text-left text-[8px] font-medium tracking-wider text-[var(--uav-text-tertiary)]',
+                  header.column.getCanSort() && 'cursor-pointer hover:text-[var(--uav-text-secondary)]'
+                )}
+                style={{ width: header.getSize() }}
+                onClick={header.column.getToggleSortingHandler()}
+              >
+                <div className="flex items-center gap-1">
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                  {header.column.getIsSorted() === 'asc' && (
+                    <HugeiconsIcon icon={ArrowUp01Icon} className="size-2.5" strokeWidth={2} />
+                  )}
+                  {header.column.getIsSorted() === 'desc' && (
+                    <HugeiconsIcon icon={ArrowDown01Icon} className="size-2.5" strokeWidth={2} />
+                  )}
+                </div>
+              </th>
+            ))}
+          </tr>
+        ))}
+      </thead>
+      <tbody>
+        {table.getRowModel().rows.map((row) => (
+          <tr
+            key={row.id}
+            onClick={() => onSelectRow(row.original.id)}
+            className={cn(
+              'cursor-pointer border-b border-[var(--uav-stroke)]/50 transition-colors',
+              'hover:bg-white/[0.02]',
+              selectedId === row.original.id && 'bg-[var(--uav-red)]/10'
+            )}
+          >
+            {row.getVisibleCells().map((cell) => (
+              <td key={cell.id} className="px-2 py-1.5">
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
 

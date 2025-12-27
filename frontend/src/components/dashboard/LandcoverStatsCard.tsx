@@ -1,29 +1,20 @@
 'use client'
 
 import * as React from 'react'
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { PlayIcon } from '@hugeicons/core-free-icons'
 
 import { cn } from '@/lib/utils'
+import { DashboardCard } from './DashboardCard'
 import { useLandcoverStats, useLandcoverStatus, useRunLandcover } from '@/api/queries'
-import { Button } from '@/components/ui/button'
 
-// Landcover class colors (matching backend LANDCOVER_COLORS)
-const LANDCOVER_COLORS: Record<string, string> = {
-  'bare-ground': '#deb887',
-  'tree': '#228b22',
-  'road': '#808080',
-  'pavement': '#b22222',
-  'grass': '#7cfc00',
-  'building': '#ff8c00',
-}
-
-const LANDCOVER_LABELS: Record<string, string> = {
-  'bare-ground': 'Bare Ground',
-  'tree': 'Tree',
-  'road': 'Road',
-  'pavement': 'Pavement',
-  'grass': 'Grass',
-  'building': 'Building',
+const LANDCOVER_CONFIG: Record<string, { color: string; label: string }> = {
+  grass: { color: '#7cfc00', label: 'Grass' },
+  road: { color: '#808080', label: 'Road' },
+  'bare-ground': { color: '#deb887', label: 'Bare' },
+  building: { color: '#ff8c00', label: 'Building' },
+  tree: { color: '#228b22', label: 'Tree' },
+  pavement: { color: '#b22222', label: 'Pavement' },
 }
 
 function LandcoverStatsCard() {
@@ -37,101 +28,72 @@ function LandcoverStatsCard() {
     return Object.entries(stats.stats)
       .filter(([_, value]) => value.percentage > 0)
       .map(([name, value]) => ({
-        name: LANDCOVER_LABELS[name] || name,
+        name,
+        label: LANDCOVER_CONFIG[name]?.label || name,
         value: value.percentage,
-        fill: LANDCOVER_COLORS[name] || '#888888',
+        color: LANDCOVER_CONFIG[name]?.color || '#888888',
       }))
       .sort((a, b) => b.value - a.value)
+      .slice(0, 5)
   }, [stats])
 
   const handleRunAnalysis = () => {
-    runLandcover(undefined, {
-      onSuccess: () => {
-        refetch()
-      },
-    })
+    runLandcover(undefined, { onSuccess: () => refetch() })
   }
 
   return (
-    <div
-      className={cn(
-        'rounded-[var(--uav-radius)] border border-[var(--uav-stroke)]',
-        'bg-[var(--uav-panel)] p-4'
-      )}
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[var(--uav-text)]">
-          Land Cover Analysis
-        </h3>
-        {!status?.computed && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleRunAnalysis}
-            disabled={isPending}
-          >
-            {isPending ? 'Analyzing...' : 'Run Analysis'}
-          </Button>
-        )}
-      </div>
-
+    <DashboardCard title="Landcover" helpText="Land cover classification analysis">
       {status?.computed && chartData.length > 0 ? (
-        <>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={40}
-                  outerRadius={70}
-                  paddingAngle={2}
-                  dataKey="value"
-                  label={({ name, value }) => `${value.toFixed(1)}%`}
-                  labelLine={false}
-                >
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value: number) => [`${value.toFixed(2)}%`, 'Coverage']}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="mt-3 space-y-1.5">
-            {chartData.map((item) => (
-              <div
-                key={item.name}
-                className="flex items-center justify-between text-xs"
+        <div className="space-y-2">
+          {chartData.map((item) => (
+            <div key={item.name} className="flex items-center gap-2">
+              <span
+                className="w-16 text-[9px] font-medium tracking-wide"
+                style={{ color: item.color }}
               >
-                <div className="flex items-center gap-2">
-                  <div
-                    className="h-3 w-3 rounded-sm"
-                    style={{ backgroundColor: item.fill }}
-                  />
-                  <span className="text-[var(--uav-text-secondary)]">
-                    {item.name}
-                  </span>
-                </div>
-                <span className="font-medium text-[var(--uav-text)]">
-                  {item.value.toFixed(1)}%
-                </span>
+                {item.label.toUpperCase()}
+              </span>
+              <div className="relative h-1.5 flex-1 overflow-hidden bg-white/[0.03]">
+                <div
+                  className="absolute inset-y-0 left-0"
+                  style={{
+                    width: `${Math.min(item.value, 100)}%`,
+                    backgroundColor: item.color,
+                  }}
+                />
               </div>
-            ))}
-          </div>
-        </>
+              <span
+                className="w-10 text-right font-mono text-[10px]"
+                style={{ color: item.color }}
+              >
+                {item.value.toFixed(0)}%
+              </span>
+            </div>
+          ))}
+        </div>
       ) : (
-        <div className="flex h-32 items-center justify-center text-sm text-[var(--uav-text-secondary)]">
-          {status?.computed
-            ? 'No landcover data available'
-            : 'Run analysis to see landcover distribution'}
+        <div className="flex flex-col items-center py-3">
+          <p className="mb-3 text-[10px] tracking-wider text-[var(--uav-text-tertiary)]">
+            {status?.computed ? 'NO DATA' : 'ANALYSIS REQUIRED'}
+          </p>
+          {!status?.computed && (
+            <button
+              onClick={handleRunAnalysis}
+              disabled={isPending}
+              className={cn(
+                'flex items-center gap-2 border px-3 py-1.5 text-[9px] font-medium uppercase tracking-wider transition-all',
+                isPending
+                  ? 'cursor-not-allowed border-[var(--uav-stroke)] text-[var(--uav-text-tertiary)]'
+                  : 'border-[var(--uav-stroke)] text-[var(--uav-text-secondary)] hover:border-[var(--uav-red)]/30 hover:text-[var(--uav-red)]'
+              )}
+            >
+              <HugeiconsIcon icon={PlayIcon} strokeWidth={2} className="size-3" />
+              {isPending ? 'Running...' : 'Execute'}
+            </button>
+          )}
         </div>
       )}
-    </div>
+    </DashboardCard>
   )
 }
 

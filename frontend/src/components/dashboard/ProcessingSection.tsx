@@ -2,10 +2,9 @@
 
 import * as React from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon, CheckmarkCircle02Icon, Loading03Icon } from '@hugeicons/core-free-icons'
 
 import { cn } from '@/lib/utils'
-import { Progress } from '@/components/ui/progress'
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -31,97 +30,129 @@ function ProcessingSection({
   const [open, setOpen] = React.useState(false)
 
   return (
-    <div className="mt-3 border-t border-[var(--uav-stroke)] pt-3">
-      {/* Progress Bar - Always visible */}
-      <div className="mb-3">
-        <div className="mb-1.5 flex items-center justify-between text-xs">
+    <div className="space-y-3">
+      {/* Progress Bar */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-[var(--uav-text-secondary)]">
-              Progress: <span className="text-[var(--uav-text)]">{progress}%</span>
-            </span>
             {isRunning && currentStep && (
-              <span className="animate-pulse rounded-[var(--uav-radius-xs)] bg-[var(--uav-teal)]/15 px-2 py-0.5 text-xs text-[var(--uav-teal)]">
+              <span className="flex items-center gap-1.5 text-xs text-[var(--uav-teal)]">
+                <HugeiconsIcon
+                  icon={Loading03Icon}
+                  strokeWidth={2}
+                  className="size-3 animate-spin"
+                />
                 {currentStep}
               </span>
             )}
+            {!isRunning && progress === 100 && (
+              <span className="flex items-center gap-1.5 text-xs text-[var(--uav-success)]">
+                <HugeiconsIcon
+                  icon={CheckmarkCircle02Icon}
+                  strokeWidth={2}
+                  className="size-3"
+                />
+                Complete
+              </span>
+            )}
           </div>
-          <span className="text-[var(--uav-text-secondary)]">
-            Elapsed: <span className="text-[var(--uav-text)]">{elapsed.toFixed(1)}s</span>
-          </span>
+          <div className="flex items-center gap-3 text-[10px] text-[var(--uav-text-tertiary)]">
+            <span>
+              <span className="tabular-nums text-[var(--uav-text)]">{progress}</span>%
+            </span>
+            <span>
+              <span className="tabular-nums text-[var(--uav-text)]">{elapsed.toFixed(1)}</span>s
+            </span>
+          </div>
         </div>
-        <Progress value={progress} />
+
+        {/* Custom Progress Bar */}
+        <div className="relative h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
+          <div
+            className={cn(
+              'absolute inset-y-0 left-0 rounded-full transition-all duration-300',
+              progress === 100
+                ? 'bg-[var(--uav-success)]'
+                : 'bg-gradient-to-r from-[var(--uav-teal)] to-[var(--uav-teal)]/60'
+            )}
+            style={{ width: `${progress}%` }}
+          />
+          {isRunning && progress < 100 && (
+            <div
+              className="absolute inset-y-0 animate-pulse rounded-full bg-white/20"
+              style={{ left: `${Math.max(0, progress - 10)}%`, width: '10%' }}
+            />
+          )}
+        </div>
       </div>
 
-      {/* Steps Table - Collapsible */}
+      {/* Steps - Collapsible */}
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="flex w-full cursor-pointer select-none items-center justify-between gap-2 rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] px-3 py-2">
-          <span className="text-sm font-medium text-[var(--uav-text)]">Steps</span>
+        <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg bg-white/[0.02] px-3 py-2 transition-colors hover:bg-white/[0.04]">
+          <span className="text-xs text-[var(--uav-text-secondary)]">
+            處理步驟
+          </span>
           <HugeiconsIcon
             icon={ArrowDown01Icon}
             strokeWidth={2}
             className={cn(
-              'size-4 text-[var(--uav-text-secondary)] transition-transform duration-200',
+              'size-3.5 text-[var(--uav-text-tertiary)] transition-transform duration-200',
               !open && '-rotate-90'
             )}
           />
         </CollapsibleTrigger>
 
         <CollapsibleContent className="pt-2">
-          <div className="overflow-hidden rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)]">
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-[var(--uav-stroke)]">
-                  <th className="w-8 px-2.5 py-2 text-left font-medium text-[var(--uav-text-tertiary)]">
-                    #
-                  </th>
-                  <th className="px-2.5 py-2 text-left font-medium text-[var(--uav-text-tertiary)]">
-                    Step
-                  </th>
-                  <th className="w-24 px-2.5 py-2 text-left font-medium text-[var(--uav-text-tertiary)]">
-                    Status
-                  </th>
-                  <th className="w-20 px-2.5 py-2 text-left font-medium text-[var(--uav-text-tertiary)]">
-                    Time
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {steps.map((step) => (
-                  <tr
-                    key={step.id}
-                    className="border-b border-[var(--uav-stroke)] last:border-b-0"
-                  >
-                    <td className="px-2.5 py-2 text-[var(--uav-text-secondary)]">{step.id}</td>
-                    <td className="px-2.5 py-2 text-[var(--uav-text)]">{step.name}</td>
-                    <td className="px-2.5 py-2">
-                      <StatusBadge status={step.status} />
-                    </td>
-                    <td className="px-2.5 py-2 text-[var(--uav-text-secondary)]">
-                      {step.elapsed != null ? `${step.elapsed.toFixed(2)}s` : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-0.5">
+            {steps.map((step, idx) => (
+              <div
+                key={step.id}
+                className={cn(
+                  'flex items-center gap-3 rounded-md px-3 py-1.5 transition-colors',
+                  step.status === 'running' && 'bg-[var(--uav-teal)]/5'
+                )}
+              >
+                {/* Step number */}
+                <span className="w-4 text-center text-[10px] tabular-nums text-[var(--uav-text-tertiary)]">
+                  {idx + 1}
+                </span>
+
+                {/* Step name */}
+                <span
+                  className={cn(
+                    'flex-1 text-xs',
+                    step.status === 'done' && 'text-[var(--uav-text-secondary)]',
+                    step.status === 'running' && 'text-[var(--uav-teal)]',
+                    step.status === 'pending' && 'text-[var(--uav-text-tertiary)]',
+                    step.status === 'error' && 'text-[var(--uav-error)]'
+                  )}
+                >
+                  {step.name}
+                </span>
+
+                {/* Status indicator */}
+                <div className="flex items-center gap-2">
+                  {step.elapsed != null && (
+                    <span className="text-[10px] tabular-nums text-[var(--uav-text-tertiary)]">
+                      {step.elapsed.toFixed(1)}s
+                    </span>
+                  )}
+                  <div
+                    className={cn(
+                      'size-1.5 rounded-full',
+                      step.status === 'done' && 'bg-[var(--uav-success)]',
+                      step.status === 'running' && 'animate-pulse bg-[var(--uav-teal)]',
+                      step.status === 'pending' && 'bg-[var(--uav-text-tertiary)]/30',
+                      step.status === 'error' && 'bg-[var(--uav-error)]'
+                    )}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         </CollapsibleContent>
       </Collapsible>
     </div>
-  )
-}
-
-function StatusBadge({ status }: { status: ProcessingStep['status'] }) {
-  const styles = {
-    pending: 'text-[var(--uav-text-tertiary)]',
-    running: 'text-[var(--uav-teal)]',
-    done: 'text-[var(--uav-success)]',
-    error: 'text-[var(--uav-error)]',
-  }
-
-  return (
-    <span className={cn('capitalize', styles[status])}>
-      {status}
-    </span>
   )
 }
 

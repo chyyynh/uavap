@@ -10,7 +10,17 @@ import type {
   TerrainStats,
   TerrainStatus,
 } from '@/types/detection'
-import { MOCK_OBJECTS, MOCK_PROJECTS, MOCK_GPU_STATUS } from './mock-data'
+import {
+  MOCK_OBJECTS,
+  MOCK_PROJECTS,
+  MOCK_GPU_STATUS,
+  MOCK_LANDCOVER_STATUS,
+  MOCK_LANDCOVER_STATS,
+  MOCK_TERRAIN_STATUS,
+  MOCK_TERRAIN_STATS,
+  MOCK_ORTHO_BOUNDS,
+  MOCK_TIFF_METADATA,
+} from './mock-data'
 import { notify } from '@/components/ui/sonner'
 
 // ============================================
@@ -48,10 +58,30 @@ export function getStoredApiUrl(): string {
 }
 
 /**
+ * 強制完整 mock 模式（用於 /mock 路由）
+ */
+let _forceFullMock = false
+
+export function setForceFullMock(value: boolean): void {
+  _forceFullMock = value
+}
+
+export function isForceFullMock(): boolean {
+  return _forceFullMock
+}
+
+/**
  * 是否使用 mock 資料
  */
 function useMock(): boolean {
-  return !getApiBaseUrl()
+  return _forceFullMock || !getApiBaseUrl()
+}
+
+/**
+ * 是否使用完整 mock 資料（包含 landcover/terrain）
+ */
+function useFullMock(): boolean {
+  return _forceFullMock
 }
 
 // ============================================
@@ -141,12 +171,22 @@ async function fetchDetections(projectId: string): Promise<DetectionObject[]> {
  * 取得專案列表
  */
 async function fetchProjects(): Promise<Project[]> {
+  // 總是包含 mock project 選項
+  const mockProject = MOCK_PROJECTS.find(p => p.id === 'mock')
+
   if (useMock()) {
     await new Promise((resolve) => setTimeout(resolve, 50))
     return MOCK_PROJECTS
   }
 
-  return apiRequest<Project[]>('/api/projects')
+  try {
+    const apiProjects = await apiRequest<Project[]>('/api/projects')
+    // 在 API 返回的 projects 前面加上 mock project 選項
+    return mockProject ? [mockProject, ...apiProjects] : apiProjects
+  } catch {
+    // API 失敗時回傳 mock 資料
+    return MOCK_PROJECTS
+  }
 }
 
 /**
@@ -165,6 +205,9 @@ async function fetchGpuStatus(): Promise<GpuStatus> {
  * 取得正射影像邊界
  */
 async function fetchOrthoBounds(): Promise<OrthoBounds | null> {
+  if (useFullMock()) {
+    return MOCK_ORTHO_BOUNDS
+  }
   if (useMock()) {
     return null
   }
@@ -182,12 +225,14 @@ async function fetchOrthoBounds(): Promise<OrthoBounds | null> {
 }
 
 /**
- * 取得正射影像 URL
+ * 取得正射影像 URL（含壓縮參數）
+ * @param maxWidth 最大寬度（預設 2000px，適合地圖顯示）
+ * @param quality JPEG 品質 (1-95)
  */
-export function getOrthoImageUrl(): string | null {
+export function getOrthoImageUrl(maxWidth = 2000, quality = 80): string | null {
   const baseUrl = getApiBaseUrl()
   if (!baseUrl) return null
-  return `${baseUrl}/api/ortho/image`
+  return `${baseUrl}/api/ortho/image?max_width=${maxWidth}&quality=${quality}`
 }
 
 /**
@@ -203,6 +248,9 @@ export function getOrthoPreviewUrl(withDetections = true, width = 800, height = 
  * 取得 TIFF 元資料
  */
 async function fetchTiffMetadata(): Promise<TiffMetadata | null> {
+  if (useFullMock()) {
+    return MOCK_TIFF_METADATA
+  }
   if (useMock()) {
     return {
       filename: 'demo_ortho.tif',
@@ -232,6 +280,9 @@ async function fetchTiffMetadata(): Promise<TiffMetadata | null> {
  * 取得土地覆蓋狀態
  */
 async function fetchLandcoverStatus(): Promise<LandcoverStatus> {
+  if (useFullMock()) {
+    return MOCK_LANDCOVER_STATUS
+  }
   if (useMock()) {
     return { computed: false, has_stats: false }
   }
@@ -243,6 +294,9 @@ async function fetchLandcoverStatus(): Promise<LandcoverStatus> {
  * 取得土地覆蓋統計
  */
 async function fetchLandcoverStats(): Promise<LandcoverStats | null> {
+  if (useFullMock()) {
+    return MOCK_LANDCOVER_STATS as LandcoverStats
+  }
   if (useMock()) {
     return null
   }
@@ -255,21 +309,25 @@ async function fetchLandcoverStats(): Promise<LandcoverStats | null> {
 }
 
 /**
- * 取得土地覆蓋彩色圖 URL（用於 PDF 報告）
+ * 取得土地覆蓋彩色圖 URL
+ * @param maxWidth 最大寬度（預設 2000px）
  */
-export function getLandcoverImageUrl(): string | null {
+export function getLandcoverImageUrl(maxWidth = 2000): string | null {
   const baseUrl = getApiBaseUrl()
   if (!baseUrl) return null
-  return `${baseUrl}/api/landcover/image`
+  return `${baseUrl}/api/landcover/image?max_width=${maxWidth}`
 }
 
 /**
  * 取得土地覆蓋疊加圖 URL
+ * @param alpha 透明度 (0-1)
+ * @param maxWidth 最大寬度
+ * @param quality JPEG 品質
  */
-export function getLandcoverOverlayUrl(alpha = 0.5): string | null {
+export function getLandcoverOverlayUrl(alpha = 0.5, maxWidth = 2000, quality = 80): string | null {
   const baseUrl = getApiBaseUrl()
   if (!baseUrl) return null
-  return `${baseUrl}/api/landcover/overlay?alpha=${alpha}`
+  return `${baseUrl}/api/landcover/overlay?alpha=${alpha}&max_width=${maxWidth}&quality=${quality}`
 }
 
 /**
@@ -287,6 +345,9 @@ async function runLandcoverAnalysis(): Promise<{ status: string; stats: Record<s
  * 取得地形分析狀態
  */
 async function fetchTerrainStatus(): Promise<TerrainStatus> {
+  if (useFullMock()) {
+    return MOCK_TERRAIN_STATUS
+  }
   if (useMock()) {
     return { computed: false, has_stats: false, dsm_loaded: false }
   }
@@ -298,6 +359,9 @@ async function fetchTerrainStatus(): Promise<TerrainStatus> {
  * 取得地形統計
  */
 async function fetchTerrainStats(): Promise<TerrainStats | null> {
+  if (useFullMock()) {
+    return MOCK_TERRAIN_STATS as TerrainStats
+  }
   if (useMock()) {
     return null
   }
@@ -311,20 +375,22 @@ async function fetchTerrainStats(): Promise<TerrainStats | null> {
 
 /**
  * 取得坡度圖 URL
+ * @param maxWidth 最大寬度（預設 2000px）
  */
-export function getSlopeImageUrl(): string | null {
+export function getSlopeImageUrl(maxWidth = 2000): string | null {
   const baseUrl = getApiBaseUrl()
   if (!baseUrl) return null
-  return `${baseUrl}/api/terrain/slope`
+  return `${baseUrl}/api/terrain/slope?max_width=${maxWidth}`
 }
 
 /**
  * 取得坡向圖 URL
+ * @param maxWidth 最大寬度（預設 2000px）
  */
-export function getAspectImageUrl(): string | null {
+export function getAspectImageUrl(maxWidth = 2000): string | null {
   const baseUrl = getApiBaseUrl()
   if (!baseUrl) return null
-  return `${baseUrl}/api/terrain/aspect`
+  return `${baseUrl}/api/terrain/aspect?max_width=${maxWidth}`
 }
 
 /**
@@ -498,7 +564,7 @@ export function useOrthoBounds() {
   return useQuery({
     queryKey: orthoKeys.bounds,
     queryFn: fetchOrthoBounds,
-    enabled: !useMock(),
+    enabled: useFullMock() || !useMock(),
   })
 }
 
@@ -583,8 +649,8 @@ export function useLandcoverStatus() {
   return useQuery({
     queryKey: landcoverKeys.status,
     queryFn: fetchLandcoverStatus,
-    enabled: !useMock(),
-    refetchInterval: 5000, // 每 5 秒更新一次狀態
+    enabled: useFullMock() || !useMock(),
+    refetchInterval: useFullMock() ? false : 5000,
   })
 }
 
@@ -595,7 +661,7 @@ export function useLandcoverStats() {
   return useQuery({
     queryKey: landcoverKeys.stats,
     queryFn: fetchLandcoverStats,
-    enabled: !useMock(),
+    enabled: useFullMock() || !useMock(),
   })
 }
 
@@ -629,8 +695,8 @@ export function useTerrainStatus() {
   return useQuery({
     queryKey: terrainKeys.status,
     queryFn: fetchTerrainStatus,
-    enabled: !useMock(),
-    refetchInterval: 5000, // 每 5 秒更新一次狀態
+    enabled: useFullMock() || !useMock(),
+    refetchInterval: useFullMock() ? false : 5000,
   })
 }
 
@@ -641,7 +707,7 @@ export function useTerrainStats() {
   return useQuery({
     queryKey: terrainKeys.stats,
     queryFn: fetchTerrainStats,
-    enabled: !useMock(),
+    enabled: useFullMock() || !useMock(),
   })
 }
 

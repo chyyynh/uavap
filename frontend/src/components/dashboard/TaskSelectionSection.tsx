@@ -3,7 +3,6 @@
 import * as React from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
-  InformationCircleIcon,
   UserIcon,
   Car01Icon,
   Cone01Icon,
@@ -11,16 +10,16 @@ import {
   CheckmarkCircle02Icon,
   Image02Icon,
   GridIcon,
+  ArrowDown01Icon,
 } from '@hugeicons/core-free-icons'
 
 import { cn } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
-import { IconButton } from '@/components/ui/icon-button'
 import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from '@/components/ui/tooltip'
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from '@/components/ui/collapsible'
 import {
   useTaskOptionsContext,
   type UploadedFiles,
@@ -28,24 +27,21 @@ import {
 import { useUploadFile } from '@/api/queries'
 
 const DETECTION_TARGETS = [
-  { key: 'personEnabled' as const, label: '人', icon: UserIcon },
-  { key: 'vehicleEnabled' as const, label: '車輛', icon: Car01Icon },
-  { key: 'coneEnabled' as const, label: '交通錐', icon: Cone01Icon },
+  { key: 'personEnabled' as const, label: 'PERSON', icon: UserIcon },
+  { key: 'vehicleEnabled' as const, label: 'VEHICLE', icon: Car01Icon },
+  { key: 'coneEnabled' as const, label: 'CONE', icon: Cone01Icon },
 ]
 
 const ANALYSIS_OPTIONS = [
   {
     key: 'geoEnabled' as const,
-    label: '高程與高度',
-    helpText: '在屬性表新增 elev_z（中心點高程）、height_m（相對地面高度）',
-    subtitle: '點雲 / DSM',
+    label: 'Terrain Analysis',
+    subtitle: 'DSM',
   },
   {
     key: 'changeEnabled' as const,
-    label: '地表變化偵測',
-    helpText:
-      '使用 UPerNet 模型進行土地覆蓋分類，包含：裸地、樹木、道路、鋪面、草地、建物',
-    subtitle: '土地覆蓋',
+    label: 'Land Cover',
+    subtitle: 'Classification',
   },
 ]
 
@@ -54,38 +50,25 @@ const FILE_UPLOAD_ITEMS: Array<{
   label: string
   accept: string
   icon: typeof Image02Icon
-  helpText: string
 }> = [
-  {
-    key: 'ortho',
-    label: '正射影像',
-    accept: '.tif,.tiff',
-    icon: Image02Icon,
-    helpText: 'odm_orthophoto.tif',
-  },
-  {
-    key: 'dsm',
-    label: 'DSM',
-    accept: '.tif,.tiff',
-    icon: GridIcon,
-    helpText: 'dsm.tif - 數值高程模型',
-  },
-  {
-    key: 'laz',
-    label: '點雲',
-    accept: '.laz,.las',
-    icon: GridIcon,
-    helpText: 'odm_georeferenced_model.laz',
-  },
+  { key: 'ortho', label: 'Orthophoto', accept: '.tif,.tiff', icon: Image02Icon },
+  { key: 'dsm', label: 'DSM', accept: '.tif,.tiff', icon: GridIcon },
+  { key: 'laz', label: 'Point Cloud', accept: '.laz,.las', icon: GridIcon },
 ]
 
 function TaskSelectionSection() {
   const { options, setOption, uploadedFiles, setUploadedFile, requiredFiles } =
     useTaskOptionsContext()
   const uploadMutation = useUploadFile()
-  const fileInputRefs = React.useRef<Record<string, HTMLInputElement | null>>(
-    {},
-  )
+  const fileInputRefs = React.useRef<Record<string, HTMLInputElement | null>>({})
+  const [uploadOpen, setUploadOpen] = React.useState(false)
+
+  const uploadedCount = FILE_UPLOAD_ITEMS.filter(
+    (item) => requiredFiles[item.key] && uploadedFiles[item.key]?.uploaded
+  ).length
+  const requiredCount = FILE_UPLOAD_ITEMS.filter(
+    (item) => requiredFiles[item.key]
+  ).length
 
   const handleFileSelect = React.useCallback(
     async (key: keyof UploadedFiles, file: File) => {
@@ -97,103 +80,121 @@ function TaskSelectionSection() {
         setUploadedFile(key, null)
       }
     },
-    [uploadMutation, setUploadedFile],
+    [uploadMutation, setUploadedFile]
   )
 
   const handleInputChange = React.useCallback(
     (key: keyof UploadedFiles) => (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
-      if (file) {
-        handleFileSelect(key, file)
-      }
+      if (file) handleFileSelect(key, file)
     },
-    [handleFileSelect],
+    [handleFileSelect]
   )
 
   return (
-    <div className="border-t border-(--uav-stroke) pt-3">
-      <div className="rounded-(--uav-radius-sm) border border-(--uav-stroke) bg-(--uav-panel-elevated) p-3">
-        {/* Detection Targets - Chips */}
-        <div className="mb-4">
-          <span className="mb-2 block text-xs text-(--uav-text-tertiary)">
-            偵測目標
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {DETECTION_TARGETS.map((target) => (
+    <div className="space-y-4">
+      {/* Detection Targets */}
+      <div>
+        <div className="mb-2 text-[8px] tracking-wider text-[var(--uav-text-tertiary)]">
+          DETECTION TARGETS
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {DETECTION_TARGETS.map((target) => {
+            const isActive = options[target.key]
+            return (
               <button
                 key={target.key}
                 type="button"
-                onClick={() => setOption(target.key, !options[target.key])}
+                onClick={() => setOption(target.key, !isActive)}
                 className={cn(
-                  'flex items-center gap-2 rounded-(--uav-radius-sm) border px-3 py-2 text-sm transition-all',
-                  options[target.key]
-                    ? 'border-(--uav-teal)/40 bg-(--uav-teal)/10 text-(--uav-teal)'
-                    : 'border-(--uav-stroke) bg-transparent text-(--uav-text-secondary) hover:border-(--uav-text-tertiary)',
+                  'flex flex-col items-center gap-1.5 border py-2.5 transition-all',
+                  isActive
+                    ? 'border-[var(--uav-red)]/30 bg-[var(--uav-red)]/10'
+                    : 'border-[var(--uav-stroke)] bg-transparent hover:border-[var(--uav-stroke-strong)]'
                 )}
               >
                 <HugeiconsIcon
                   icon={target.icon}
                   strokeWidth={1.5}
-                  className="size-4"
-                />
-                {target.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Analysis Options - Switches */}
-        <div className="space-y-1 border-t border-(--uav-stroke) pt-3">
-          {ANALYSIS_OPTIONS.map((option) => (
-            <div
-              key={option.key}
-              className="group flex items-center justify-between gap-3 rounded-(--uav-radius-xs) px-1 py-1.5"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-(--uav-text)">
-                  {option.label}
-                  {option.subtitle && (
-                    <span className="ml-1.5 text-xs text-(--uav-text-tertiary)">
-                      {option.subtitle}
-                    </span>
+                  className={cn(
+                    'size-4 transition-colors',
+                    isActive ? 'text-[var(--uav-red)]' : 'text-[var(--uav-text-tertiary)]'
                   )}
+                />
+                <span
+                  className={cn(
+                    'text-[9px] font-medium tracking-wider transition-colors',
+                    isActive ? 'text-[var(--uav-red)]' : 'text-[var(--uav-text-secondary)]'
+                  )}
+                >
+                  {target.label}
                 </span>
-                {option.helpText && (
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <IconButton
-                          variant="help"
-                          size="sm"
-                          aria-label="Help"
-                          className="opacity-0 transition-opacity group-hover:opacity-100"
-                        >
-                          <HugeiconsIcon
-                            icon={InformationCircleIcon}
-                            strokeWidth={2}
-                            className="size-3"
-                          />
-                        </IconButton>
-                      }
-                    />
-                    <TooltipContent>{option.helpText}</TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
-              <Switch
-                checked={options[option.key]}
-                onCheckedChange={(v) => setOption(option.key, v)}
-              />
-            </div>
-          ))}
+              </button>
+            )
+          })}
         </div>
+      </div>
 
-        {/* File Upload Section */}
-        <div className="mt-4 border-t border-(--uav-stroke) pt-3">
-          <span className="mb-2 block text-xs text-(--uav-text-tertiary)">
-            檔案上傳
-          </span>
-          <div className="space-y-2">
+      {/* Analysis Options */}
+      <div className="space-y-1.5">
+        {ANALYSIS_OPTIONS.map((option) => (
+          <div
+            key={option.key}
+            className="flex items-center justify-between gap-3 border border-[var(--uav-stroke)] px-3 py-2"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-medium text-[var(--uav-text-secondary)]">
+                {option.label}
+              </span>
+              <span className="text-[9px] text-[var(--uav-text-tertiary)]">
+                ({option.subtitle})
+              </span>
+            </div>
+            <Switch
+              checked={options[option.key]}
+              onCheckedChange={(v) => setOption(option.key, v)}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* File Upload - Collapsible */}
+      <Collapsible open={uploadOpen} onOpenChange={setUploadOpen}>
+        <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 border border-[var(--uav-stroke)] px-3 py-2 transition-colors hover:bg-white/[0.02]">
+          <div className="flex items-center gap-2">
+            <HugeiconsIcon
+              icon={CloudUploadIcon}
+              strokeWidth={1.5}
+              className="size-3.5 text-[var(--uav-text-tertiary)]"
+            />
+            <span className="text-[10px] font-medium text-[var(--uav-text-secondary)]">
+              File Upload
+            </span>
+            {requiredCount > 0 && (
+              <span
+                className={cn(
+                  'px-1.5 py-0.5 text-[9px] font-medium',
+                  uploadedCount === requiredCount
+                    ? 'bg-[var(--uav-success)]/15 text-[var(--uav-success)]'
+                    : 'bg-[var(--uav-warning)]/15 text-[var(--uav-warning)]'
+                )}
+              >
+                {uploadedCount}/{requiredCount}
+              </span>
+            )}
+          </div>
+          <HugeiconsIcon
+            icon={ArrowDown01Icon}
+            strokeWidth={2}
+            className={cn(
+              'size-3 text-[var(--uav-text-tertiary)] transition-transform duration-200',
+              !uploadOpen && '-rotate-90'
+            )}
+          />
+        </CollapsibleTrigger>
+
+        <CollapsibleContent className="pt-1.5">
+          <div className="space-y-1">
             {FILE_UPLOAD_ITEMS.map((item) => {
               const isRequired = requiredFiles[item.key]
               const fileInfo = uploadedFiles[item.key]
@@ -205,38 +206,33 @@ function TaskSelectionSection() {
                 <div
                   key={item.key}
                   className={cn(
-                    'flex items-center gap-3 rounded-(--uav-radius-sm) border px-3 py-2 transition-all',
+                    'flex items-center gap-2 border px-3 py-2 transition-all',
                     isUploaded
-                      ? 'border-(--uav-teal)/40 bg-(--uav-teal)/5'
-                      : 'border-(--uav-stroke) bg-transparent',
+                      ? 'border-[var(--uav-success)]/20 bg-[var(--uav-success)]/5'
+                      : 'border-[var(--uav-stroke)]'
                   )}
                 >
                   <HugeiconsIcon
                     icon={isUploaded ? CheckmarkCircle02Icon : item.icon}
                     strokeWidth={1.5}
                     className={cn(
-                      'size-5',
+                      'size-3.5 shrink-0',
                       isUploaded
-                        ? 'text-(--uav-teal)'
-                        : 'text-(--uav-text-tertiary)',
+                        ? 'text-[var(--uav-success)]'
+                        : 'text-[var(--uav-text-tertiary)]'
                     )}
                   />
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-(--uav-text)">
+                      <span className="text-[10px] font-medium text-[var(--uav-text-secondary)]">
                         {item.label}
                       </span>
                       {fileInfo && (
-                        <span className="truncate text-xs text-(--uav-text-tertiary)">
+                        <span className="truncate text-[9px] text-[var(--uav-text-tertiary)]">
                           {fileInfo.name}
                         </span>
                       )}
                     </div>
-                    {!isUploaded && (
-                      <span className="text-xs text-(--uav-text-tertiary)">
-                        {item.helpText}
-                      </span>
-                    )}
                   </div>
                   <input
                     ref={(el) => {
@@ -252,27 +248,21 @@ function TaskSelectionSection() {
                     onClick={() => fileInputRefs.current[item.key]?.click()}
                     disabled={uploadMutation.isPending}
                     className={cn(
-                      'flex items-center gap-1.5 rounded-(--uav-radius-xs) px-2 py-1 text-xs transition-all',
+                      'shrink-0 px-2 py-1 text-[9px] font-medium tracking-wider transition-all',
                       isUploaded
-                        ? 'bg-transparent text-(--uav-text-secondary) hover:text-(--uav-text)'
-                        : 'bg-(--uav-teal)/10 text-(--uav-teal) hover:bg-(--uav-teal)/20',
-                      uploadMutation.isPending &&
-                        'opacity-50 cursor-not-allowed',
+                        ? 'text-[var(--uav-text-tertiary)] hover:text-[var(--uav-text)]'
+                        : 'border border-[var(--uav-stroke)] text-[var(--uav-text-secondary)] hover:border-[var(--uav-red)]/30 hover:text-[var(--uav-red)]',
+                      uploadMutation.isPending && 'cursor-not-allowed opacity-50'
                     )}
                   >
-                    <HugeiconsIcon
-                      icon={CloudUploadIcon}
-                      strokeWidth={2}
-                      className="size-3.5"
-                    />
-                    {isUploaded ? '更換' : '上傳'}
+                    {isUploaded ? 'CHANGE' : 'SELECT'}
                   </button>
                 </div>
               )
             })}
           </div>
-        </div>
-      </div>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   )
 }

@@ -1,3 +1,6 @@
+/* Surveillance Noir - Typography */
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -130,39 +133,434 @@
     }
 }
 
-/* UAV Dashboard Theme - Simplified Flat Design */
+/* ============================================
+   SURVEILLANCE NOIR - Design System
+   Dark cinematic aesthetic with red accents
+   ============================================ */
+
 .uav-dashboard {
-  /* Background layers - solid colors */
-  --uav-bg: #0d1421;
-  --uav-panel: #151d2e;
-  --uav-panel-elevated: #1a2438;
+  /* Core palette - Ultra dark */
+  --noir-black: #0a0a0a;
+  --noir-dark: #111111;
+  --noir-surface: #161616;
+  --noir-elevated: #1a1a1a;
 
-  /* Softer borders */
-  --uav-stroke: rgba(255, 255, 255, 0.06);
-  --uav-stroke-strong: rgba(255, 255, 255, 0.12);
+  /* Panel backgrounds */
+  --uav-bg: var(--noir-black);
+  --uav-panel: rgba(10, 10, 10, 0.95);
+  --uav-panel-elevated: rgba(18, 18, 18, 0.98);
+  --uav-glass: rgba(10, 10, 10, 0.85);
 
-  /* Clear text hierarchy */
-  --uav-text: rgba(255, 255, 255, 0.95);
-  --uav-text-secondary: rgba(255, 255, 255, 0.70);
-  --uav-text-tertiary: rgba(255, 255, 255, 0.45);
+  /* Borders - Very subtle */
+  --uav-stroke: rgba(255, 255, 255, 0.08);
+  --uav-stroke-strong: rgba(255, 255, 255, 0.15);
+  --uav-stroke-glow: rgba(229, 57, 53, 0.4);
 
-  /* Legacy aliases for compatibility */
+  /* Text hierarchy */
+  --uav-text: rgba(255, 255, 255, 0.92);
+  --uav-text-secondary: rgba(255, 255, 255, 0.6);
+  --uav-text-tertiary: rgba(255, 255, 255, 0.35);
+
+  /* Legacy aliases */
   --uav-muted: var(--uav-text-secondary);
   --uav-muted2: var(--uav-text-tertiary);
 
-  /* Accent colors - slightly desaturated */
-  --uav-accent: #f59e0b;
-  --uav-teal: #14b8a6;
-  --uav-success: #22c55e;
-  --uav-error: #ef4444;
-  --uav-warning: #f59e0b;
+  /* Accent colors - Blood red primary */
+  --uav-red: #e53935;
+  --uav-red-glow: rgba(229, 57, 53, 0.5);
+  --uav-red-dim: #b71c1c;
+  --uav-gold: #ffc107;
+  --uav-gold-dim: #c79100;
 
-  /* Simplified shadows */
-  --uav-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  --uav-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  /* Semantic colors */
+  --uav-accent: var(--uav-red);
+  --uav-teal: var(--uav-red); /* Map teal to red for compatibility */
+  --uav-teal-glow: var(--uav-red-glow);
+  --uav-success: #4caf50;
+  --uav-error: #e53935;
+  --uav-warning: #ffc107;
 
-  /* Unified border radius */
-  --uav-radius: 12px;
-  --uav-radius-sm: 8px;
-  --uav-radius-xs: 4px;
+  /* Shadows & glows */
+  --uav-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+  --uav-shadow-md: 0 4px 24px rgba(0, 0, 0, 0.6);
+  --uav-glow: 0 0 30px var(--uav-red-glow);
+  --uav-glow-sm: 0 0 15px var(--uav-red-glow);
+
+  /* Minimal radius */
+  --uav-radius: 2px;
+  --uav-radius-sm: 1px;
+  --uav-radius-xs: 0px;
+
+  /* Corner dot size */
+  --corner-dot-size: 4px;
+  --corner-dot-offset: 8px;
+
+  /* Typography */
+  --font-display: 'Crimson Pro', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', monospace;
+  --font-sans: 'Inter Variable', sans-serif;
+}
+
+/* ============================================
+   SURVEILLANCE NOIR - Panel System
+   ============================================ */
+
+/* Film grain overlay */
+.noir-grain {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+/* Vignette effect */
+.noir-vignette {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9997;
+  background: radial-gradient(ellipse at center, transparent 0%, transparent 50%, rgba(0,0,0,0.4) 100%);
+}
+
+/* Corner dots - screen level */
+.noir-corner-dots::before,
+.noir-corner-dots::after {
+  content: '';
+  position: fixed;
+  width: var(--corner-dot-size);
+  height: var(--corner-dot-size);
+  background: var(--uav-text-tertiary);
+  border-radius: 50%;
+  z-index: 100;
+}
+
+.noir-corner-dots::before {
+  top: var(--corner-dot-offset);
+  left: var(--corner-dot-offset);
+}
+
+.noir-corner-dots::after {
+  top: var(--corner-dot-offset);
+  right: var(--corner-dot-offset);
+}
+
+/* Additional corner dots via inner wrapper */
+.noir-corner-dots-inner::before,
+.noir-corner-dots-inner::after {
+  content: '';
+  position: fixed;
+  width: var(--corner-dot-size);
+  height: var(--corner-dot-size);
+  background: var(--uav-text-tertiary);
+  border-radius: 50%;
+  z-index: 100;
+}
+
+.noir-corner-dots-inner::before {
+  bottom: var(--corner-dot-offset);
+  left: var(--corner-dot-offset);
+}
+
+.noir-corner-dots-inner::after {
+  bottom: var(--corner-dot-offset);
+  right: var(--corner-dot-offset);
+}
+
+/* Noir Panel - Dark floating panel with corner dots */
+.noir-panel {
+  position: relative;
+  background: var(--uav-panel);
+  border: 1px solid var(--uav-stroke);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Panel corner dots */
+.noir-panel::before,
+.noir-panel::after {
+  content: '';
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: var(--uav-text-tertiary);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.noir-panel::before {
+  top: 6px;
+  left: 6px;
+}
+
+.noir-panel::after {
+  top: 6px;
+  right: 6px;
+}
+
+.noir-panel-inner {
+  position: relative;
+  height: 100%;
+}
+
+.noir-panel-inner::before,
+.noir-panel-inner::after {
+  content: '';
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: var(--uav-text-tertiary);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.noir-panel-inner::before {
+  bottom: 6px;
+  left: 6px;
+}
+
+.noir-panel-inner::after {
+  bottom: 6px;
+  right: 6px;
+}
+
+/* Legacy HUD panel - maps to noir panel */
+.hud-panel {
+  position: relative;
+  background: var(--uav-panel);
+  border: 1px solid var(--uav-stroke);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.hud-panel-inner {
+  position: relative;
+  height: 100%;
+}
+
+/* ============================================
+   SURVEILLANCE NOIR - Typography
+   ============================================ */
+
+/* Serif display text */
+.noir-serif {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* Monospace data text */
+.noir-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* HUD text styles - updated for noir */
+.hud-text {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hud-label {
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--uav-text-tertiary);
+}
+
+.hud-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--uav-red);
+}
+
+/* ============================================
+   SURVEILLANCE NOIR - Status & Indicators
+   ============================================ */
+
+.hud-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud-status::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.hud-status.online { color: var(--uav-success); }
+.hud-status.offline { color: var(--uav-error); }
+.hud-status.busy { color: var(--uav-warning); }
+
+/* ============================================
+   SURVEILLANCE NOIR - Red Digital Display
+   ============================================ */
+
+.noir-timer {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--uav-red);
+  letter-spacing: 0.15em;
+  text-shadow: 0 0 20px var(--uav-red-glow), 0 0 40px var(--uav-red-glow);
+  padding: 8px 16px;
+  background: linear-gradient(180deg, rgba(229, 57, 53, 0.1) 0%, transparent 100%);
+  border: 1px solid rgba(229, 57, 53, 0.3);
+}
+
+.noir-timer-sm {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--uav-red);
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 10px var(--uav-red-glow);
+}
+
+/* ============================================
+   SURVEILLANCE NOIR - Buttons & Controls
+   ============================================ */
+
+.noir-btn {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid var(--uav-stroke);
+  color: var(--uav-text-secondary);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.noir-btn:hover {
+  border-color: var(--uav-stroke-strong);
+  color: var(--uav-text);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.noir-btn-primary {
+  background: var(--uav-red);
+  border-color: var(--uav-red);
+  color: white;
+  box-shadow: 0 0 20px var(--uav-red-glow);
+}
+
+.noir-btn-primary:hover {
+  background: var(--uav-red-dim);
+  border-color: var(--uav-red-dim);
+}
+
+/* ============================================
+   SURVEILLANCE NOIR - Location Labels
+   ============================================ */
+
+.noir-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--uav-gold);
+  color: #000;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.noir-location-secondary {
+  background: rgba(255, 193, 7, 0.15);
+  color: var(--uav-gold);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+/* ============================================
+   SURVEILLANCE NOIR - Animations
+   ============================================ */
+
+@keyframes noir-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.noir-fade-in {
+  animation: noir-fade-in 0.5s ease-out forwards;
+}
+
+.noir-delay-1 { animation-delay: 0.1s; opacity: 0; }
+.noir-delay-2 { animation-delay: 0.2s; opacity: 0; }
+.noir-delay-3 { animation-delay: 0.3s; opacity: 0; }
+.noir-delay-4 { animation-delay: 0.4s; opacity: 0; }
+
+/* Legacy boot animation - maps to noir */
+.hud-boot {
+  animation: noir-fade-in 0.4s ease-out forwards;
+}
+
+@keyframes noir-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.noir-pulse {
+  animation: noir-pulse 2s ease-in-out infinite;
+}
+
+.hud-pulse {
+  animation: noir-pulse 2s ease-in-out infinite;
+}
+
+/* ============================================
+   SURVEILLANCE NOIR - Glow Effects
+   ============================================ */
+
+.noir-glow {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.noir-glow:hover {
+  border-color: var(--uav-stroke-glow);
+  box-shadow: var(--uav-glow-sm);
+}
+
+.hud-glow {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.hud-glow:hover,
+.hud-glow.active {
+  border-color: var(--uav-stroke-glow);
+  box-shadow: var(--uav-glow-sm);
+}
+
+/* Legacy grid/scanlines - now subtle */
+.hud-scanlines {
+  display: none; /* Disabled for noir aesthetic */
+}
+
+.hud-grid {
+  display: none; /* Disabled for noir aesthetic */
+}
+
+.hud-reticle {
+  position: relative;
 }

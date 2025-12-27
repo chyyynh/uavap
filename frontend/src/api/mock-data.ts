@@ -74,6 +74,7 @@ export const MOCK_OBJECTS: DetectionObject[] = [
 ]
 
 export const MOCK_PROJECTS: Project[] = [
+  { id: 'mock', name: '[MOCK] Demo Data' },
   { id: 'futas', name: 'FUTAS_Test_Field' },
   { id: 'harbor', name: 'Harbor_Breakwater' },
   { id: 'bridge', name: 'Bridge_Inspection' },
@@ -116,3 +117,99 @@ export const LANDCOVER_GEOJSON = {
 
 export const DEFAULT_MAP_CENTER: [number, number] = [25.0476, 121.5329]
 export const DEFAULT_MAP_ZOOM = 17
+
+// ============================================
+// Mock Landcover Stats
+// ============================================
+export const MOCK_LANDCOVER_STATUS = {
+  computed: true,
+  has_stats: true,
+}
+
+export const MOCK_LANDCOVER_STATS = {
+  classes: {
+    0: 'bare-ground',
+    1: 'tree',
+    2: 'road',
+    3: 'pavement',
+    4: 'grass',
+    5: 'building',
+  },
+  colors: {
+    'bare-ground': [222, 184, 135],
+    'tree': [34, 139, 34],
+    'road': [128, 128, 128],
+    'pavement': [178, 34, 34],
+    'grass': [124, 252, 0],
+    'building': [255, 140, 0],
+  },
+  stats: {
+    'grass': { pixels: 125000, percentage: 50.4 },
+    'road': { pixels: 45000, percentage: 18.1 },
+    'bare-ground': { pixels: 36250, percentage: 14.6 },
+    'building': { pixels: 27000, percentage: 10.9 },
+    'tree': { pixels: 10000, percentage: 4.0 },
+    'pavement': { pixels: 5000, percentage: 2.0 },
+  },
+}
+
+// ============================================
+// Mock Terrain Stats
+// ============================================
+export const MOCK_TERRAIN_STATUS = {
+  computed: true,
+  has_stats: true,
+  dsm_loaded: true,
+}
+
+export const MOCK_TERRAIN_STATS = {
+  elevation: {
+    min: 53.4,
+    max: 75.6,
+    mean: 61.3,
+    std: 3.5,
+  },
+  slope: {
+    min: 0,
+    max: 45.2,
+    mean: 12.3,
+    distribution: {
+      flat: { count: 50000, percentage: 28.5 },
+      gentle: { count: 45000, percentage: 25.7 },
+      moderate: { count: 35000, percentage: 20.0 },
+      steep: { count: 45000, percentage: 25.8 },
+    },
+  },
+  aspect: {
+    distribution: {
+      N: { count: 12000, percentage: 18 },
+      NE: { count: 11000, percentage: 17 },
+      E: { count: 9000, percentage: 14 },
+      SE: { count: 8000, percentage: 12 },
+      S: { count: 6000, percentage: 9 },
+      SW: { count: 5000, percentage: 8 },
+      W: { count: 6000, percentage: 9 },
+      NW: { count: 8000, percentage: 12 },
+    },
+  },
+}
+
+// ============================================
+// Mock Ortho Data
+// ============================================
+export const MOCK_ORTHO_BOUNDS = {
+  north: 25.048,
+  south: 25.047,
+  east: 121.534,
+  west: 121.532,
+}
+
+export const MOCK_TIFF_METADATA = {
+  filename: 'demo_ortho.tif',
+  datetime: new Date().toISOString(),
+  width: 4096,
+  height: 3072,
+  crs: 'EPSG:4326',
+  pixel_w: 0.05,
+  pixel_h: 0.05,
+}

@@ -1,3 +1,5 @@
+'use client'
+
 import * as React from 'react'
 
 import { cn } from '@/lib/utils'
@@ -11,12 +13,18 @@ function Sidebar({ children, className }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'flex flex-col gap-3.5 overflow-auto pr-1',
-        'scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10',
+        'flex w-72 shrink-0 flex-col gap-2 overflow-y-auto overflow-x-hidden',
+        'scrollbar-thin scrollbar-track-transparent scrollbar-thumb-[var(--uav-teal)]/20',
+        'hover:scrollbar-thumb-[var(--uav-teal)]/40',
         className
       )}
     >
-      {children}
+      {/* Stagger the boot animation for each child */}
+      {React.Children.map(children, (child, index) => (
+        <div className={cn('hud-boot', `hud-boot-delay-${Math.min(index + 1, 6)}`)}>
+          {child}
+        </div>
+      ))}
     </aside>
   )
 }

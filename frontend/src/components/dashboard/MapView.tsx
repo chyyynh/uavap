@@ -14,8 +14,6 @@ import {
 } from 'react-leaflet'
 import type { CircleMarker as LeafletCircleMarker, Map as LeafletMap } from 'leaflet'
 
-import { cn } from '@/lib/utils'
-import { Chip } from '@/components/ui/chip'
 import { LayerPanel } from './LayerPanel'
 import { HoverCard } from './HoverCard'
 import type { DetectionObject, LayerVisibility, ObjectClass, OrthoBounds } from '@/types/detection'
@@ -26,8 +24,6 @@ import {
 
 interface MapViewProps {
   objects: DetectionObject[]
-  projectName: string
-  status: string
   layerVisibility: LayerVisibility
   onLayerToggle: (layer: keyof LayerVisibility) => void
   selectedObjectId: number | null
@@ -53,8 +49,6 @@ function fmt(v: number | null | undefined, decimals = 2): string {
 
 function MapView({
   objects,
-  projectName,
-  status,
   layerVisibility,
   onLayerToggle,
   selectedObjectId,
@@ -218,11 +212,6 @@ function MapView({
         <ZoomControl position="bottomright" />
         <ScaleControl position="bottomleft" imperial={false} />
       </MapContainer>
-
-      <div className="pointer-events-none absolute right-3 top-3 z-[600] flex gap-2">
-        <Chip variant="muted">Project: {projectName}</Chip>
-        <Chip variant="muted">Status: {status}</Chip>
-      </div>
 
       <LayerPanel
         visibility={layerVisibility}
