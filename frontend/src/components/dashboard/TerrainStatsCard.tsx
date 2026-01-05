@@ -3,9 +3,9 @@
 import * as React from 'react'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from 'recharts'
 
-import { cn } from '@/lib/utils'
 import { useTerrainStats, useTerrainStatus, useRunTerrain } from '@/api/queries'
 import { Button } from '@/components/ui/button'
+import { DashboardCard } from './DashboardCard'
 
 // Slope category colors
 const SLOPE_COLORS: Record<string, string> = {
@@ -75,17 +75,10 @@ function TerrainStatsCard() {
   }
 
   return (
-    <div
-      className={cn(
-        'rounded-[var(--uav-radius)] border border-[var(--uav-stroke)]',
-        'bg-[var(--uav-panel)] p-4'
-      )}
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[var(--uav-text)]">
-          Terrain Analysis
-        </h3>
-        {!status?.computed && status?.dsm_loaded && (
+    <DashboardCard
+      title="Terrain Analysis"
+      action={
+        !status?.computed && status?.dsm_loaded && (
           <Button
             size="sm"
             variant="outline"
@@ -94,8 +87,9 @@ function TerrainStatsCard() {
           >
             {isPending ? 'Analyzing...' : 'Run Analysis'}
           </Button>
-        )}
-      </div>
+        )
+      }
+    >
 
       {status?.computed && stats ? (
         <div className="space-y-4">
@@ -185,7 +179,7 @@ function TerrainStatsCard() {
               : 'Run analysis to see terrain statistics'}
         </div>
       )}
-    </div>
+    </DashboardCard>
   )
 }
 

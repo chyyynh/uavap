@@ -25,7 +25,8 @@ import {
   useTaskOptionsContext,
   type UploadedFiles,
 } from '@/contexts/TaskOptionsContext'
-import { useUploadFile } from '@/api/queries'
+import { useUploadFile, useUploadLocalPaths } from '@/api/queries'
+import { Input } from '@/components/ui/input'
 
 const DETECTION_TARGETS = [
   { key: 'personEnabled' as const, label: '人', icon: UserIcon },
@@ -80,15 +81,43 @@ const FILE_UPLOAD_ITEMS: Array<{
 ]
 
 function TaskSelectionSection() {
-  const { options, setOption, uploadedFiles, setUploadedFile, requiredFiles } =
+  const { options, setOption, fileMode, setFileMode, bumpCacheBust, uploadedFiles, setUploadedFile, requiredFiles } =
     useTaskOptionsContext()
   const uploadMutation = useUploadFile()
+  const uploadLocalMutation = useUploadLocalPaths()
   const fileInputRefs = React.useRef<Record<string, HTMLInputElement | null>>(
     {},
+  )
+  const [localProjectDir, setLocalProjectDir] = React.useState('C:\\Users\\chonrou hsu\\Pictures\\20250410_hole\\20260105\\uavap\\UAVAP_DATA\\project_001')
+  const [localNames, setLocalNames] = React.useState({
+    ortho: 'odm_orthophoto.tif',
+    dsm: 'dsm.tif',
+    laz: 'odm_georeferenced_model.laz',
+  })
+
+  const switchMode = React.useCallback(
+    (mode: 'upload' | 'local') => {
+      setFileMode(mode)
+      if (mode === 'local') {
+        setLocalNames({
+          ortho: 'odm_orthophoto.tif',
+          dsm: 'dsm.tif',
+          laz: 'odm_georeferenced_model.laz',
+        })
+        setUploadedFile('ortho', null)
+        setUploadedFile('dsm', null)
+        setUploadedFile('laz', null)
+      }
+    },
+    [setFileMode, setUploadedFile],
   )
 
   const handleFileSelect = React.useCallback(
     async (key: keyof UploadedFiles, file: File) => {
+      if (fileMode === 'local') {
+        setUploadedFile(key, { name: file.name, uploaded: true })
+        return
+      }
       try {
         setUploadedFile(key, { name: file.name, uploaded: false })
         await uploadMutation.mutateAsync({ file, fileType: key })
@@ -97,8 +126,43 @@ function TaskSelectionSection() {
         setUploadedFile(key, null)
       }
     },
-    [uploadMutation, setUploadedFile],
+    [fileMode, uploadMutation, setUploadedFile],
   )
+
+  const handleLocalProjectChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalProjectDir(e.target.value)
+  }, [])
+
+  const handleLocalNameChange = React.useCallback(
+    (key: keyof UploadedFiles) => (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value
+      setLocalNames((prev) => ({ ...prev, [key]: value }))
+    },
+    [],
+  )
+
+  const localRequirementsMet = React.useMemo(() => {
+    if (!localProjectDir.trim()) return false
+    if (requiredFiles.ortho && !localNames.ortho.trim()) return false
+    if (requiredFiles.dsm && !localNames.dsm.trim()) return false
+    if (requiredFiles.laz && !localNames.laz.trim()) return false
+    return true
+  }, [localNames, localProjectDir, requiredFiles])
+
+  const handleApplyLocal = React.useCallback(async () => {
+    if (!localRequirementsMet) return
+    const payload = {
+      project_dir: localProjectDir.trim(),
+      ortho_name: requiredFiles.ortho ? (localNames.ortho.trim() || undefined) : undefined,
+      dsm_name: requiredFiles.dsm ? (localNames.dsm.trim() || undefined) : undefined,
+      laz_name: requiredFiles.laz ? (localNames.laz.trim() || undefined) : undefined,
+    }
+    await uploadLocalMutation.mutateAsync(payload)
+    if (payload.ortho_name) setUploadedFile('ortho', { name: `${payload.project_dir}\\${payload.ortho_name}`, uploaded: true })
+    if (payload.dsm_name) setUploadedFile('dsm', { name: `${payload.project_dir}\\${payload.dsm_name}`, uploaded: true })
+    if (payload.laz_name) setUploadedFile('laz', { name: `${payload.project_dir}\\${payload.laz_name}`, uploaded: true })
+    bumpCacheBust()
+  }, [bumpCacheBust, localNames, localProjectDir, localRequirementsMet, requiredFiles, setUploadedFile, uploadLocalMutation])
 
   const handleInputChange = React.useCallback(
     (key: keyof UploadedFiles) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,7 +254,51 @@ function TaskSelectionSection() {
 
         {/* File Upload Section */}
         <div className="mt-4 border-t border-(--uav-stroke) pt-3">
-          <span className="mb-2 block text-xs text-(--uav-text-tertiary)">
+          {fileMode === 'local' && (
+            <div className="mb-3">
+              <span className="mb-2 block text-xs text-(--uav-text-tertiary)">
+                Local project dir
+              </span>
+              <Input
+                value={localProjectDir}
+                onChange={handleLocalProjectChange}
+                placeholder="C:\\path\\to\\project"
+                className="h-7 text-xs"
+              />
+            </div>
+          )}
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs text-(--uav-text-tertiary)">
+              File source
+            </span>
+            <div className="flex overflow-hidden rounded-(--uav-radius-xs) border border-(--uav-stroke)">
+              <button
+                type="button"
+                onClick={() => switchMode('upload')}
+                className={cn(
+                  'px-2 py-1 text-[10px] font-medium uppercase tracking-wider transition-all',
+                  fileMode === 'upload'
+                    ? 'bg-(--uav-teal)/20 text-(--uav-teal)'
+                    : 'bg-transparent text-(--uav-text-tertiary) hover:text-(--uav-text-secondary)',
+                )}
+              >
+                Upload
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode('local')}
+                className={cn(
+                  'px-2 py-1 text-[10px] font-medium uppercase tracking-wider transition-all',
+                  fileMode === 'local'
+                    ? 'bg-(--uav-teal)/20 text-(--uav-teal)'
+                    : 'bg-transparent text-(--uav-text-tertiary) hover:text-(--uav-text-secondary)',
+                )}
+              >
+                Local
+              </button>
+            </div>
+          </div>
+          <span className="mb-2 block text-xs text-(--uav-text-tertiary) hidden">
             檔案上傳
           </span>
           <div className="space-y-2">
@@ -226,19 +334,28 @@ function TaskSelectionSection() {
                       <span className="text-sm text-(--uav-text)">
                         {item.label}
                       </span>
-                      {fileInfo && (
+                      {fileInfo && fileMode === 'upload' && (
                         <span className="truncate text-xs text-(--uav-text-tertiary)">
                           {fileInfo.name}
                         </span>
                       )}
                     </div>
-                    {!isUploaded && (
+                    {!isUploaded && fileMode === 'upload' && (
                       <span className="text-xs text-(--uav-text-tertiary)">
                         {item.helpText}
                       </span>
                     )}
                   </div>
-                  <input
+                  {fileMode === 'local' ? (
+                    <Input
+                      value={localNames[item.key] ?? ''}
+                      onChange={handleLocalNameChange(item.key)}
+                      placeholder="Filename"
+                      className="h-7 text-xs"
+                    />
+                  ) : (
+                    <>
+                    <input
                     ref={(el) => {
                       fileInputRefs.current[item.key] = el
                     }}
@@ -267,10 +384,30 @@ function TaskSelectionSection() {
                     />
                     {isUploaded ? '更換' : '上傳'}
                   </button>
+                    </>
+                  )}
                 </div>
               )
             })}
           </div>
+          {fileMode === 'local' && (
+            <div className="mt-3 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={handleApplyLocal}
+                disabled={!localRequirementsMet || uploadLocalMutation.isPending}
+                className={cn(
+                  'rounded-(--uav-radius-xs) border px-3 py-1 text-xs font-medium transition-all',
+                  localRequirementsMet
+                    ? 'border-(--uav-teal)/40 text-(--uav-teal) hover:bg-(--uav-teal)/10'
+                    : 'border-(--uav-stroke) text-(--uav-text-tertiary)',
+                  uploadLocalMutation.isPending && 'opacity-50 cursor-not-allowed',
+                )}
+              >
+                {uploadLocalMutation.isPending ? 'Applying...' : 'Apply local paths'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

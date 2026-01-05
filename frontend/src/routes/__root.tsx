@@ -5,6 +5,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { Toaster } from '@/components/ui/sonner'
+import { TaskOptionsProvider } from '@/contexts/TaskOptionsContext'
 import appCss from '../styles.css?url'
 
 const queryClient = new QueryClient({
@@ -44,13 +45,17 @@ export const Route = createRootRoute({
 function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
-      <Toaster />
+      <TaskOptionsProvider>
+        <Outlet />
+        <Toaster />
+      </TaskOptionsProvider>
     </QueryClientProvider>
   )
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const showDevtools = import.meta.env?.DEV
+
   return (
     <html lang="zh-Hant" className="dark">
       <head>
@@ -58,21 +63,23 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
-        <TanStackDevtools
-          config={{
-            position: 'bottom-right',
-          }}
-          plugins={[
-            {
-              name: 'Tanstack Router',
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-            {
-              name: 'React Query',
-              render: <ReactQueryDevtoolsPanel />,
-            },
-          ]}
-        />
+        {showDevtools && (
+          <TanStackDevtools
+            config={{
+              position: 'bottom-right',
+            }}
+            plugins={[
+              {
+                name: 'Tanstack Router',
+                render: <TanStackRouterDevtoolsPanel />,
+              },
+              {
+                name: 'React Query',
+                render: <ReactQueryDevtoolsPanel />,
+              },
+            ]}
+          />
+        )}
         <Scripts />
       </body>
     </html>

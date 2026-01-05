@@ -202,6 +202,12 @@ class ProcessingRequest(BaseModel):
     include_elevation: bool = True
     include_terrain: bool = False  # 地形分析（需要 DSM）
     include_landcover: bool = False  # 土地覆蓋偵測（UPerNet）
+class LocalUploadRequest(BaseModel):
+    project_dir: str | None = None
+    ortho_name: str | None = None
+    dsm_name: str | None = None
+    laz_name: str | None = None
+
 
 # ============================================
 # 核心函式
@@ -968,6 +974,63 @@ async def upload_dsm(file: UploadFile = File(...)):
         }
     raise HTTPException(status_code=400, detail="DSM must be a GeoTIFF file")
 
+
+
+def _validate_local_path(path_str: str, exts: set[str], label: str) -> str:
+    path = Path(path_str)
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=400, detail=f"{label} file not found: {path}")
+    if path.suffix.lower() not in exts:
+        allowed = ", ".join(sorted(exts))
+        raise HTTPException(status_code=400, detail=f"{label} must be one of: {allowed}")
+    return str(path)
+
+@app.post("/api/upload/local")
+async def upload_local_paths(payload: LocalUploadRequest):
+    if not payload.project_dir:
+        raise HTTPException(status_code=400, detail="project_dir is required")
+
+    base_dir = Path(payload.project_dir)
+    if not base_dir.exists() or not base_dir.is_dir():
+        raise HTTPException(status_code=400, detail=f"Project dir not found: {base_dir}")
+
+    def build_path(name: str | None) -> str | None:
+        if not name:
+            return None
+        p = Path(name)
+        if p.is_absolute():
+            return str(p)
+        return str(base_dir / name)
+
+    loaded = {}
+
+    ortho_path = build_path(payload.ortho_name)
+    dsm_path = build_path(payload.dsm_name)
+    laz_path = build_path(payload.laz_name)
+
+    if ortho_path:
+        cleanup_all()
+        ortho_path = _validate_local_path(ortho_path, {".tif", ".tiff"}, "Ortho")
+        uploaded_files["ortho"] = ortho_path
+        load_ortho_image(ortho_path)
+        loaded["ortho"] = ortho_path
+
+    if dsm_path:
+        dsm_path = _validate_local_path(dsm_path, {".tif", ".tiff"}, "DSM")
+        uploaded_files["dsm"] = dsm_path
+        load_dsm(dsm_path)
+        loaded["dsm"] = dsm_path
+
+    if laz_path:
+        laz_path = _validate_local_path(laz_path, {".laz", ".las"}, "LAZ")
+        uploaded_files["laz"] = laz_path
+        load_point_cloud(laz_path)
+        loaded["laz"] = laz_path
+
+    if not loaded:
+        raise HTTPException(status_code=400, detail="No valid files to load")
+
+    return {"status": "ok", "loaded": loaded}
 
 @app.post("/api/process")
 async def start_processing(request: ProcessingRequest = None):

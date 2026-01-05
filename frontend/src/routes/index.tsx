@@ -25,6 +25,7 @@ import {
   useTerrainStatus,
   useTerrainStats,
 } from '@/api/queries'
+import { useTaskOptionsContext } from '@/contexts/TaskOptionsContext'
 import { useProcessing } from '@/hooks/use-processing'
 import { useLayerVisibility } from '@/hooks/use-layer-visibility'
 import { usePdfExport } from '@/hooks/use-pdf-export'
@@ -49,10 +50,11 @@ function Dashboard() {
   const { data: landcoverStats } = useLandcoverStats()
   const { data: terrainStatus } = useTerrainStatus()
   const { data: terrainStats } = useTerrainStats()
-  const orthoUrl = getOrthoImageUrl()
-  const landcoverUrl = landcoverStatus?.computed ? getLandcoverOverlayUrl() : null
-  const slopeUrl = terrainStatus?.computed ? getSlopeImageUrl() : null
-  const aspectUrl = terrainStatus?.computed ? getAspectImageUrl() : null
+  const { cacheBust } = useTaskOptionsContext()
+  const orthoUrl = getOrthoImageUrl(cacheBust)
+  const landcoverUrl = landcoverStatus?.computed ? getLandcoverOverlayUrl(0.5, cacheBust) : null
+  const slopeUrl = terrainStatus?.computed ? getSlopeImageUrl(cacheBust) : null
+  const aspectUrl = terrainStatus?.computed ? getAspectImageUrl(cacheBust) : null
   const { isRunning, progress, elapsed, steps, currentStep, run } = useProcessing()
   const { visibility, toggle, enable } = useLayerVisibility()
   const { exportPdf, isExporting, canExport } = usePdfExport({

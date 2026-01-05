@@ -108,7 +108,7 @@ function MapView({
         zoomControl={false}
         ref={mapRef as any}
       >
-        <MapController mapRef={mapRef} objects={objects} />
+        <MapController mapRef={mapRef} objects={objects} orthoBounds={orthoBounds} />
 
         {layerVisibility.base && (
           <TileLayer
@@ -219,9 +219,13 @@ function MapView({
         <ScaleControl position="bottomleft" imperial={false} />
       </MapContainer>
 
-      <div className="pointer-events-none absolute right-3 top-3 z-[600] flex gap-2">
-        <Chip variant="muted">Project: {projectName}</Chip>
-        <Chip variant="muted">Status: {status}</Chip>
+      <div className="pointer-events-none absolute right-3 top-3 z-[600] flex max-w-[70vw] gap-2">
+        <Chip variant="muted" className="max-w-[40vw] truncate">
+          Project: {projectName}
+        </Chip>
+        <Chip variant="muted" className="max-w-[25vw] truncate">
+          Status: {status}
+        </Chip>
       </div>
 
       <LayerPanel
@@ -242,11 +246,12 @@ function MapView({
 interface MapControllerProps {
   mapRef?: React.MutableRefObject<LeafletMap | null>
   objects?: DetectionObject[]
+  orthoBounds?: OrthoBounds | null
 }
 
-function MapController({ mapRef, objects }: MapControllerProps) {
+function MapController({ mapRef, objects, orthoBounds }: MapControllerProps) {
   const map = useMap()
-  const hasFittedRef = React.useRef(false)
+  const lastFitRef = React.useRef<string | null>(null)
 
   React.useEffect(() => {
     if (mapRef) {
@@ -254,9 +259,32 @@ function MapController({ mapRef, objects }: MapControllerProps) {
     }
   }, [map, mapRef])
 
-  // 當有偵測結果時，自動移動地圖到結果範圍
+  // ???????????????????
   React.useEffect(() => {
-    if (objects && objects.length > 0 && !hasFittedRef.current) {
+    const hasOrthoBounds = !!(
+      orthoBounds &&
+      orthoBounds.north !== undefined &&
+      orthoBounds.south !== undefined &&
+      orthoBounds.east !== undefined &&
+      orthoBounds.west !== undefined
+    )
+    const boundsKey = hasOrthoBounds
+      ? `${orthoBounds?.south},${orthoBounds?.west},${orthoBounds?.north},${orthoBounds?.east}`
+      : null
+
+    if (hasOrthoBounds && boundsKey && lastFitRef.current !== boundsKey) {
+      map.fitBounds(
+        [
+          [orthoBounds!.south, orthoBounds!.west],
+          [orthoBounds!.north, orthoBounds!.east],
+        ],
+        { padding: [50, 50] }
+      )
+      lastFitRef.current = boundsKey
+      return
+    }
+
+    if (objects && objects.length > 0 && lastFitRef.current === null) {
       const lats = objects.map((o) => o.lat)
       const lons = objects.map((o) => o.lon)
       const bounds: [[number, number], [number, number]] = [
@@ -264,9 +292,9 @@ function MapController({ mapRef, objects }: MapControllerProps) {
         [Math.max(...lats), Math.max(...lons)],
       ]
       map.fitBounds(bounds, { padding: [50, 50] })
-      hasFittedRef.current = true
+      lastFitRef.current = 'objects'
     }
-  }, [map, objects])
+  }, [map, objects, orthoBounds])
 
   return null
 }

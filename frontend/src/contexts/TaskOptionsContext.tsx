@@ -14,6 +14,8 @@ export interface TaskOptions {
   gpkgEnabled: boolean
 }
 
+export type FileInputMode = 'upload' | 'local'
+
 export interface UploadedFiles {
   ortho: { name: string; uploaded: boolean } | null
   dsm: { name: string; uploaded: boolean } | null
@@ -31,6 +33,10 @@ interface TaskOptionsContextValue {
   setOption: (key: keyof TaskOptions, value: boolean) => void
   outputText: string
   fieldText: string
+  fileMode: FileInputMode
+  setFileMode: (mode: FileInputMode) => void
+  cacheBust: number
+  bumpCacheBust: () => void
   uploadedFiles: UploadedFiles
   setUploadedFile: (key: keyof UploadedFiles, file: { name: string; uploaded: boolean } | null) => void
   requiredFiles: RequiredFiles
@@ -59,6 +65,8 @@ const DEFAULT_UPLOADED_FILES: UploadedFiles = {
 
 export function TaskOptionsProvider({ children }: { children: React.ReactNode }) {
   const [options, setOptions] = React.useState<TaskOptions>(DEFAULT_OPTIONS)
+  const [fileMode, setFileMode] = React.useState<FileInputMode>('upload')
+  const [cacheBust, setCacheBust] = React.useState(0)
   const [uploadedFiles, setUploadedFiles] = React.useState<UploadedFiles>(DEFAULT_UPLOADED_FILES)
 
   const setOption = React.useCallback((key: keyof TaskOptions, value: boolean) => {
@@ -118,12 +126,16 @@ export function TaskOptionsProvider({ children }: { children: React.ReactNode })
       setOption,
       outputText,
       fieldText,
+      fileMode,
+      setFileMode,
+      cacheBust,
+      bumpCacheBust: () => setCacheBust((v) => v + 1),
       uploadedFiles,
       setUploadedFile,
       requiredFiles,
       canProcess,
     }),
-    [options, setOption, outputText, fieldText, uploadedFiles, setUploadedFile, requiredFiles, canProcess]
+    [options, setOption, outputText, fieldText, fileMode, cacheBust, uploadedFiles, setUploadedFile, requiredFiles, canProcess]
   )
 
   return (

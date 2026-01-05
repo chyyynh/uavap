@@ -3,8 +3,8 @@
 import * as React from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ProcessingStep } from '@/types/detection'
-import { INITIAL_PROCESSING_STEPS } from '@/api/mock-data'
 import { getStoredApiUrl, orthoKeys } from '@/api/queries'
+import { useTaskOptionsContext } from '@/contexts/TaskOptionsContext'
 
 interface UseProcessingReturn {
   isRunning: boolean
@@ -18,15 +18,28 @@ interface UseProcessingReturn {
 
 export function useProcessing(): UseProcessingReturn {
   const queryClient = useQueryClient()
+  const { options } = useTaskOptionsContext()
   const [isRunning, setIsRunning] = React.useState(false)
   const [progress, setProgress] = React.useState(0)
   const [elapsed, setElapsed] = React.useState(0)
   const [currentStep, setCurrentStep] = React.useState('')
-  const [steps, setSteps] = React.useState<ProcessingStep[]>(
-    INITIAL_PROCESSING_STEPS
-  )
+  const [steps, setSteps] = React.useState<ProcessingStep[]>([])
   const pollingRef = React.useRef<NodeJS.Timeout | null>(null)
   const startTimeRef = React.useRef<number>(0)
+  const stepsRef = React.useRef<ProcessingStep[]>([])
+
+  const buildSteps = React.useCallback((): ProcessingStep[] => {
+    const items: ProcessingStep[] = []
+    let id = 1
+    items.push({ id: id++, name: 'Object detection', status: 'pending' })
+    if (options.geoEnabled) {
+      items.push({ id: id++, name: 'Height / volume analysis', status: 'pending' })
+    }
+    if (options.changeEnabled) {
+      items.push({ id: id++, name: 'Semantic segmentation', status: 'pending' })
+    }
+    return items
+  }, [options.changeEnabled, options.geoEnabled])
 
   const pollStatus = React.useCallback(async () => {
     const apiUrl = getStoredApiUrl()
@@ -40,8 +53,8 @@ export function useProcessing(): UseProcessingReturn {
       setCurrentStep(data.current_step || '')
       setElapsed((performance.now() - startTimeRef.current) / 1000)
 
-      // 更新 steps 狀態
-      const stepIndex = Math.floor((data.progress / 100) * INITIAL_PROCESSING_STEPS.length)
+      const totalSteps = Math.max(stepsRef.current.length, 1)
+      const stepIndex = Math.floor((data.progress / 100) * totalSteps)
       setSteps((prev) =>
         prev.map((s, i) => ({
           ...s,
@@ -57,7 +70,6 @@ export function useProcessing(): UseProcessingReturn {
       if (data.status === 'done') {
         setIsRunning(false)
         setSteps((prev) => prev.map((s) => ({ ...s, status: 'done' as const })))
-        // 重新抓取偵測結果和正射影像邊界
         queryClient.invalidateQueries({ queryKey: ['detections'] })
         queryClient.invalidateQueries({ queryKey: ['projects'] })
         queryClient.invalidateQueries({ queryKey: orthoKeys.bounds })
@@ -88,23 +100,19 @@ export function useProcessing(): UseProcessingReturn {
     if (isRunning) return
 
     const apiUrl = getStoredApiUrl()
-    console.log('🚀 Run clicked, API URL:', apiUrl || '(not connected, using mock)')
+    console.log('?? Run clicked, API URL:', apiUrl || '(not connected, using mock)')
 
-    // 如果沒有連接 API，使用 mock 模式
     if (!apiUrl) {
-      console.log('📝 Using mock mode')
+      console.log('?? Using mock mode')
       setIsRunning(true)
       setProgress(0)
       setElapsed(0)
-      setSteps(
-        INITIAL_PROCESSING_STEPS.map((s) => ({
-          ...s,
-          status: 'pending' as const,
-        }))
-      )
+      const nextSteps = buildSteps().map((s) => ({ ...s, status: 'pending' as const }))
+      stepsRef.current = nextSteps
+      setSteps(nextSteps)
 
       const startTime = performance.now()
-      const stepDurations = [0.7, 0.4, 0.5, 0.6, 0.5]
+      const stepDurations = nextSteps.map(() => 0.6)
 
       const runStep = (stepIndex: number) => {
         if (stepIndex >= stepDurations.length) {
@@ -136,25 +144,35 @@ export function useProcessing(): UseProcessingReturn {
       return
     }
 
-    // 呼叫真實 API
     try {
-      console.log('📡 Calling API:', `${apiUrl}/api/process`)
+      console.log('??? Calling API:', `${apiUrl}/api/process`)
       setIsRunning(true)
       setProgress(0)
       setElapsed(0)
+      setCurrentStep('')
       startTimeRef.current = performance.now()
-      setSteps(
-        INITIAL_PROCESSING_STEPS.map((s) => ({
-          ...s,
-          status: 'pending' as const,
-        }))
-      )
+      const nextSteps = buildSteps().map((s) => ({ ...s, status: 'pending' as const }))
+      stepsRef.current = nextSteps
+      setSteps(nextSteps)
 
       const response = await fetch(`${apiUrl}/api/process`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: 'current',
+          detect_person: options.personEnabled,
+          detect_vehicle: options.vehicleEnabled,
+          detect_cone: options.coneEnabled,
+          include_elevation: options.geoEnabled,
+          include_terrain: false,
+          include_landcover: options.changeEnabled,
+          output_stats: options.statsEnabled,
+          output_pdf: options.pdfEnabled,
+          output_gpkg: options.gpkgEnabled,
+        }),
       })
       const data = await response.json()
-      console.log('📡 API response:', data)
+      console.log('??? API response:', data)
 
       if (data.error) {
         console.error('Process error:', data.error)
@@ -162,14 +180,13 @@ export function useProcessing(): UseProcessingReturn {
         return
       }
 
-      console.log('✅ Started polling status...')
-      // 開始輪詢狀態
+      console.log('??Started polling status...')
       pollingRef.current = setInterval(pollStatus, 1000)
     } catch (error) {
-      console.error('❌ Failed to start process:', error)
+      console.error('??Failed to start process:', error)
       setIsRunning(false)
     }
-  }, [isRunning, pollStatus])
+  }, [buildSteps, isRunning, options.changeEnabled, options.coneEnabled, options.geoEnabled, options.gpkgEnabled, options.pdfEnabled, options.personEnabled, options.statsEnabled, options.vehicleEnabled, pollStatus])
 
   const reset = React.useCallback(() => {
     if (pollingRef.current) {
@@ -180,10 +197,17 @@ export function useProcessing(): UseProcessingReturn {
     setProgress(0)
     setElapsed(0)
     setCurrentStep('')
-    setSteps(INITIAL_PROCESSING_STEPS)
-  }, [])
+    const nextSteps = buildSteps()
+    stepsRef.current = nextSteps
+    setSteps(nextSteps)
+  }, [buildSteps])
 
-  // 清理
+  React.useEffect(() => {
+    const nextSteps = buildSteps()
+    stepsRef.current = nextSteps
+    setSteps(nextSteps)
+  }, [buildSteps])
+
   React.useEffect(() => {
     return () => {
       if (pollingRef.current) {

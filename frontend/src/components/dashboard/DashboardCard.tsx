@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { InformationCircleIcon } from '@hugeicons/core-free-icons'
+import { InformationCircleIcon, ArrowDown01Icon, ArrowUp01Icon } from '@hugeicons/core-free-icons'
 
 import { cn } from '@/lib/utils'
 import { IconButton } from '@/components/ui/icon-button'
@@ -25,6 +25,12 @@ function DashboardCard({
   action,
   className,
 }: DashboardCardProps) {
+  const [isCollapsed, setIsCollapsed] = React.useState(false)
+
+  const toggleCollapsed = React.useCallback(() => {
+    setIsCollapsed((prev) => !prev)
+  }, [])
+
   return (
     <section
       className={cn(
@@ -32,12 +38,12 @@ function DashboardCard({
         className
       )}
     >
-      <div className="mb-3 flex items-center justify-between">
+      <div className={cn('flex items-center justify-between', !isCollapsed && 'mb-3')}>
         <div className="flex items-center gap-2">
           <h2 className="text-base font-semibold text-[var(--uav-text)]">
             {title}
           </h2>
-          {helpText && (
+          {helpText && !isCollapsed && (
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -54,9 +60,24 @@ function DashboardCard({
             </Tooltip>
           )}
         </div>
-        {action}
+        <div className="flex items-center gap-2">
+          {!isCollapsed && action}
+          <IconButton
+            variant="ghost"
+            size="sm"
+            onClick={toggleCollapsed}
+            aria-expanded={!isCollapsed}
+            aria-label={isCollapsed ? 'Expand section' : 'Collapse section'}
+          >
+            <HugeiconsIcon
+              icon={isCollapsed ? ArrowDown01Icon : ArrowUp01Icon}
+              strokeWidth={2}
+              className="size-3.5"
+            />
+          </IconButton>
+        </div>
       </div>
-      {children}
+      {!isCollapsed && children}
     </section>
   )
 }

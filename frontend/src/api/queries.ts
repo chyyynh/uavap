@@ -184,19 +184,21 @@ async function fetchOrthoBounds(): Promise<OrthoBounds | null> {
 /**
  * 取得正射影像 URL
  */
-export function getOrthoImageUrl(): string | null {
+export function getOrthoImageUrl(cacheBust?: number): string | null {
   const baseUrl = getApiBaseUrl()
   if (!baseUrl) return null
-  return `${baseUrl}/api/ortho/image`
+  const bust = cacheBust ? `?t=${cacheBust}` : ''
+  return `${baseUrl}/api/ortho/image${bust}`
 }
 
 /**
  * 取得正射影像預覽圖 URL（含偵測結果，用於 PDF）
  */
-export function getOrthoPreviewUrl(withDetections = true, width = 800, height = 600): string | null {
+export function getOrthoPreviewUrl(withDetections = true, width = 800, height = 600, cacheBust?: number): string | null {
   const baseUrl = getApiBaseUrl()
   if (!baseUrl) return null
-  return `${baseUrl}/api/ortho/preview?with_detections=${withDetections}&width=${width}&height=${height}`
+  const bust = cacheBust ? `&t=${cacheBust}` : ''
+  return `${baseUrl}/api/ortho/preview?with_detections=${withDetections}&width=${width}&height=${height}${bust}`
 }
 
 /**
@@ -257,19 +259,21 @@ async function fetchLandcoverStats(): Promise<LandcoverStats | null> {
 /**
  * 取得土地覆蓋彩色圖 URL（用於 PDF 報告）
  */
-export function getLandcoverImageUrl(): string | null {
+export function getLandcoverImageUrl(cacheBust?: number): string | null {
   const baseUrl = getApiBaseUrl()
   if (!baseUrl) return null
-  return `${baseUrl}/api/landcover/image`
+  const bust = cacheBust ? `?t=${cacheBust}` : ''
+  return `${baseUrl}/api/landcover/image${bust}`
 }
 
 /**
  * 取得土地覆蓋疊加圖 URL
  */
-export function getLandcoverOverlayUrl(alpha = 0.5): string | null {
+export function getLandcoverOverlayUrl(alpha = 0.5, cacheBust?: number): string | null {
   const baseUrl = getApiBaseUrl()
   if (!baseUrl) return null
-  return `${baseUrl}/api/landcover/overlay?alpha=${alpha}`
+  const bust = cacheBust ? `&t=${cacheBust}` : ''
+  return `${baseUrl}/api/landcover/overlay?alpha=${alpha}${bust}`
 }
 
 /**
@@ -312,19 +316,21 @@ async function fetchTerrainStats(): Promise<TerrainStats | null> {
 /**
  * 取得坡度圖 URL
  */
-export function getSlopeImageUrl(): string | null {
+export function getSlopeImageUrl(cacheBust?: number): string | null {
   const baseUrl = getApiBaseUrl()
   if (!baseUrl) return null
-  return `${baseUrl}/api/terrain/slope`
+  const bust = cacheBust ? `?t=${cacheBust}` : ''
+  return `${baseUrl}/api/terrain/slope${bust}`
 }
 
 /**
  * 取得坡向圖 URL
  */
-export function getAspectImageUrl(): string | null {
+export function getAspectImageUrl(cacheBust?: number): string | null {
   const baseUrl = getApiBaseUrl()
   if (!baseUrl) return null
-  return `${baseUrl}/api/terrain/aspect`
+  const bust = cacheBust ? `?t=${cacheBust}` : ''
+  return `${baseUrl}/api/terrain/aspect${bust}`
 }
 
 /**
@@ -382,6 +388,13 @@ export interface UploadFileParams {
   fileType: 'ortho' | 'dsm' | 'laz'
 }
 
+export interface LocalUploadParams {
+  project_dir: string
+  ortho_name?: string
+  dsm_name?: string
+  laz_name?: string
+}
+
 /**
  * 上傳檔案（根據類型選擇端點）
  */
@@ -412,6 +425,29 @@ async function uploadFile(
   }
 
   return response.json()
+}
+
+/**
+ * Upload local file paths
+ */
+async function uploadLocalPaths(
+  params: LocalUploadParams,
+): Promise<{ status: string; loaded: Record<string, string> }> {
+  if (useMock()) {
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    const loaded: Record<string, string> = {}
+    if (params.ortho_name) loaded.ortho = params.ortho_name
+    if (params.dsm_name) loaded.dsm = params.dsm_name
+    if (params.laz_name) loaded.laz = params.laz_name
+    return { status: 'ok', loaded }
+  }
+
+  await apiRequest('/api/cleanup', { method: 'POST' })
+
+  return apiRequest<{ status: string; loaded: Record<string, string> }>('/api/upload/local', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
 }
 
 /**
@@ -534,6 +570,29 @@ export function useUploadFile() {
     },
     onError: (error) => {
       notify.error('Upload failed', error instanceof Error ? error.message : 'Unknown error')
+    },
+  })
+}
+
+/**
+ * Upload local paths Hook
+ */
+export function useUploadLocalPaths() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: uploadLocalPaths,
+    onSuccess: (data) => {
+      notify.success('Local paths applied')
+      if (data.loaded?.ortho) {
+        queryClient.clear()
+      } else {
+        queryClient.invalidateQueries({ queryKey: projectKeys.all })
+        queryClient.invalidateQueries({ queryKey: orthoKeys.bounds })
+      }
+    },
+    onError: (error) => {
+      notify.error('Apply failed', error instanceof Error ? error.message : 'Unknown error')
     },
   })
 }

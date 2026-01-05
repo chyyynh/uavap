@@ -35,7 +35,7 @@ function DetectionSummaryCard({ objects }: DetectionSummaryCardProps) {
   return (
     <div className="rounded-xl border border-[var(--uav-stroke)] bg-[var(--uav-panel)] p-3">
       {/* 橫向統計列 */}
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-2">
         {stats.map(({ key, label, icon, color }) => {
           const c = colorMap[color]
           const count = counts[key]
@@ -43,7 +43,7 @@ function DetectionSummaryCard({ objects }: DetectionSummaryCardProps) {
             <div
               key={key}
               className={cn(
-                'flex flex-1 items-center gap-2 rounded-lg px-3 py-2',
+                'flex min-w-[120px] flex-1 items-center gap-2 rounded-lg px-3 py-2',
                 c.bg
               )}
             >
@@ -59,7 +59,7 @@ function DetectionSummaryCard({ objects }: DetectionSummaryCardProps) {
         })}
 
         {/* Total */}
-        <div className={cn('flex flex-1 items-center gap-2 rounded-lg px-3 py-2', colorMap.teal.bg)}>
+        <div className={cn('flex min-w-[120px] flex-1 items-center gap-2 rounded-lg px-3 py-2', colorMap.teal.bg)}>
           <HugeiconsIcon icon={GridIcon} className={cn('size-4', colorMap.teal.icon)} strokeWidth={2} />
           <div className="flex flex-col">
             <span className={cn('text-lg font-semibold leading-none', colorMap.teal.text)}>

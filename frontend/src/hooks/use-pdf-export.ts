@@ -90,7 +90,7 @@ export function usePdfExport({ mapRef, objects, metadata, landcoverStats, terrai
       let mapImageBase64 = ''
 
       // 優先嘗試使用 ortho preview API（含偵測結果）
-      const previewUrl = getOrthoPreviewUrl(true, 1200, 900)
+      const previewUrl = getOrthoPreviewUrl(true, 1000, 700)
       console.log('[PDF Export] Preview URL:', previewUrl)
 
       if (previewUrl) {

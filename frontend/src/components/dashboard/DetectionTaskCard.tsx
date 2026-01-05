@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { DashboardCard } from './DashboardCard'
 import { TaskSelectionSection } from './TaskSelectionSection'
 import { ProcessingSection } from './ProcessingSection'
-import { TaskOptionsProvider } from '@/contexts/TaskOptionsContext'
 import type { ProcessingStep } from '@/types/detection'
 
 interface DetectionTaskCardProps {
@@ -27,8 +26,7 @@ function DetectionTaskCard({
   currentStep,
 }: DetectionTaskCardProps) {
   return (
-    <TaskOptionsProvider>
-      <DashboardCard
+    <DashboardCard
         title="Detection Task"
         helpText="選擇要偵測的物件類別與輸出項目"
       >
@@ -49,8 +47,7 @@ function DetectionTaskCard({
         >
           {isRunning ? 'RUNNING' : 'RUN'}
         </Button>
-      </DashboardCard>
-    </TaskOptionsProvider>
+    </DashboardCard>
   )
 }
 

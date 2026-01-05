@@ -3,9 +3,9 @@
 import * as React from 'react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 
-import { cn } from '@/lib/utils'
 import { useLandcoverStats, useLandcoverStatus, useRunLandcover } from '@/api/queries'
 import { Button } from '@/components/ui/button'
+import { DashboardCard } from './DashboardCard'
 
 // Landcover class colors (matching backend LANDCOVER_COLORS)
 const LANDCOVER_COLORS: Record<string, string> = {
@@ -53,17 +53,10 @@ function LandcoverStatsCard() {
   }
 
   return (
-    <div
-      className={cn(
-        'rounded-[var(--uav-radius)] border border-[var(--uav-stroke)]',
-        'bg-[var(--uav-panel)] p-4'
-      )}
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-[var(--uav-text)]">
-          Land Cover Analysis
-        </h3>
-        {!status?.computed && (
+    <DashboardCard
+      title="Land Cover Analysis"
+      action={
+        !status?.computed && (
           <Button
             size="sm"
             variant="outline"
@@ -72,8 +65,9 @@ function LandcoverStatsCard() {
           >
             {isPending ? 'Analyzing...' : 'Run Analysis'}
           </Button>
-        )}
-      </div>
+        )
+      }
+    >
 
       {status?.computed && chartData.length > 0 ? (
         <>
@@ -131,7 +125,7 @@ function LandcoverStatsCard() {
             : 'Run analysis to see landcover distribution'}
         </div>
       )}
-    </div>
+    </DashboardCard>
   )
 }
 
