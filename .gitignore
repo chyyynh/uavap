@@ -23,3 +23,5 @@ count.txt
 todos.json
 model/
 *.pth
+UAVAP_DATA/
+GIS_Output/

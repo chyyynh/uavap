@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import * as React from 'react'
 
@@ -28,7 +28,7 @@ function DetectionTaskCard({
   return (
     <DashboardCard
         title="Detection Task"
-        helpText="選擇要偵測的物件類別與輸出項目"
+        helpText="選擇偵測類別與輸入資料來源"
       >
         <TaskSelectionSection />
 

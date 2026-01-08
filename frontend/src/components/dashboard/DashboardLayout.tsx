@@ -31,7 +31,7 @@ function DashboardLayout({
         selectedProjectId={selectedProjectId}
         onProjectChange={onProjectChange}
       />
-      <main className="grid h-[calc(100vh-56px)] gap-3 p-3 grid-cols-[340px_1fr]">
+      <main className="grid h-[calc(100vh-56px)] gap-3 p-3 grid-cols-[300px_1fr]">
         <Sidebar>{sidebar}</Sidebar>
         <section className="relative overflow-hidden rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)]">
           {children}

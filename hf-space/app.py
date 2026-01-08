@@ -34,7 +34,12 @@ app.add_middleware(
 UPLOAD_DIR = Path("/tmp/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-MODEL_DIR = Path("/tmp/models")
+ROOT_DIR = Path(__file__).resolve().parents[1]
+GIS_OUTPUT_DIR = ROOT_DIR / "GIS_Output"
+GIS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+LOCAL_MODEL_DIR = (Path(__file__).resolve().parents[1] / "model")
+MODEL_DIR = Path(os.environ.get("UAVAP_MODEL_DIR", str(LOCAL_MODEL_DIR if LOCAL_MODEL_DIR.exists() else "/tmp/models")))
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 HF_MODEL_REPO = "chyyynh/uav-yolo-models"
@@ -60,27 +65,27 @@ def get_model_path(filename: str) -> Path:
 MODELS_CONFIG = {
     "car": {
         "filename": "vehicle.pt",
-        "conf": 0.75,
-        "patch_size": 1024,
-        "overlap": 850,
+        "conf": 0.5,
+        "patch_size": 896,
+        "overlap": 620,
         "nms_iou": 0.1,
         "area": (4.0, 25.0),
         "ratio": (1.0, 3.0),
     },
     "person": {
         "filename": "human.pt",
-        "conf": 0.60,
-        "patch_size": 1024,
-        "overlap": 850,
+        "conf": 0.5,
+        "patch_size": 896,
+        "overlap": 620,
         "nms_iou": 0.1,
         "area": (0.2, 1.0),
         "ratio": (0.5, 2.0),
     },
     "cone": {
         "filename": "cone.pt",
-        "conf": 0.60,
-        "patch_size": 1024,
-        "overlap": 850,
+        "conf": 0.5,
+        "patch_size": 896,
+        "overlap": 620,
         "nms_iou": 0.1,
         "area": (0.05, 0.5),
         "ratio": (0.8, 1.4),
@@ -136,6 +141,12 @@ HEIGHT_PRIOR = {
 
 CELL_BY_CLASS = {"person": 0.05, "cone": 0.05, "car": 0.10}
 MIN_PTS_BY_CLASS = {"person": 8, "cone": 10, "car": 30}
+DETECTION_COLORS = {
+    "person": (246, 130, 59),
+    "vehicle": (94, 197, 34),
+    "cone": (22, 115, 249),
+    "car": (94, 197, 34),
+}
 
 rng = np.random.default_rng(42)
 
@@ -369,6 +380,63 @@ def run_yolo_detection(classes_to_detect: list[str], progress_callback=None) -> 
     return records
 
 
+def write_combined_detection_image(detections: list[dict]) -> Path | None:
+    if ortho_cache["src"] is None:
+        print("[Combined] No ortho image loaded")
+        return None
+
+    try:
+        import cv2
+    except ImportError:
+        print("[Combined] Missing OpenCV; skipping combined image output")
+        return None
+
+    try:
+        src = ortho_cache["src"]
+        data = src.read([1, 2, 3])
+        vis = np.transpose(data, (1, 2, 0))
+        if vis.dtype != np.uint8:
+            vis = ((vis - vis.min()) / (vis.max() - vis.min() + 1e-6) * 255).astype(np.uint8)
+        vis = cv2.cvtColor(vis, cv2.COLOR_RGB2BGR)
+
+        h, w = vis.shape[:2]
+        for det in detections:
+            cls_name = det.get("cls") or det.get("class") or "object"
+            x1, y1, x2, y2 = det.get("px1"), det.get("py1"), det.get("px2"), det.get("py2")
+            if None in (x1, y1, x2, y2):
+                continue
+            x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+            x1 = max(0, min(x1, w - 1))
+            x2 = max(0, min(x2, w - 1))
+            y1 = max(0, min(y1, h - 1))
+            y2 = max(0, min(y2, h - 1))
+            color = DETECTION_COLORS.get(cls_name, (160, 174, 192))
+            cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2)
+            cv2.circle(vis, ((x1 + x2) // 2, (y1 + y2) // 2), 3, color, -1)
+            score = det.get("score", det.get("conf", 0.0))
+            label = f"{cls_name}-{det.get('id', '')} {score:.2f}"
+            cv2.putText(
+                vis,
+                label,
+                (x1, max(y1 - 5, 15)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                1,
+            )
+
+        out_png = GIS_OUTPUT_DIR / "all_objects_combined.png"
+        GIS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        if not cv2.imwrite(str(out_png), vis):
+            print("[Combined] Failed to write combined image")
+            return None
+        print(f"[Combined] Wrote {out_png}")
+        return out_png
+    except Exception as e:
+        print(f"[Combined] Failed to generate combined image: {e}")
+        return None
+
+
 # ============================================
 # UPerNet 土地覆蓋函式
 # ============================================
@@ -586,6 +654,32 @@ def compute_height_volume(detections, progress_callback=None):
 
 
 def add_latlon_to_detections(detections):
+    bounds = ortho_cache.get("bounds")
+    width = ortho_cache.get("width", 0)
+    height = ortho_cache.get("height", 0)
+
+    # Prefer visual alignment with image bounds when available.
+    if bounds and width and height:
+        west = bounds.get("west")
+        east = bounds.get("east")
+        north = bounds.get("north")
+        south = bounds.get("south")
+        if None not in (west, east, north, south):
+            for det in detections:
+                px1 = det.get("px1")
+                py1 = det.get("py1")
+                px2 = det.get("px2")
+                py2 = det.get("py2")
+                if px1 is None or py1 is None or px2 is None or py2 is None:
+                    continue
+                cx = (px1 + px2) / 2.0
+                cy = (py1 + py2) / 2.0
+                lon = west + (cx / width) * (east - west)
+                lat = north - (cy / height) * (north - south)
+                det["lat"] = round(lat, 6)
+                det["lon"] = round(lon, 6)
+            return detections
+
     if ortho_cache["crs"] is None:
         return detections
     try:
@@ -859,7 +953,7 @@ async def get_ortho_image(max_width: int = None, quality: int = 85):
 
 
 @app.get("/api/ortho/preview")
-async def get_ortho_preview(width: int = 800, height: int = 600, quality: int = 85):
+async def get_ortho_preview(width: int = 800, height: int = 600, quality: int = 85, with_detections: bool = False):
     """取得正射影像預覽 (JPEG with compression)"""
     if ortho_cache["src"] is None:
         raise HTTPException(status_code=404, detail="No image loaded")
@@ -873,6 +967,38 @@ async def get_ortho_preview(width: int = 800, height: int = 600, quality: int = 
 
     img = Image.fromarray(data)
     img.thumbnail((width, height), Image.Resampling.LANCZOS)
+
+    if with_detections and processing_state.get("results"):
+        try:
+            from PIL import ImageDraw
+            draw = ImageDraw.Draw(img)
+            colors = {
+                "person": (59, 130, 246),
+                "vehicle": (34, 197, 94),
+                "cone": (249, 115, 22),
+            }
+            transform = ortho_cache.get("transform")
+            inv_transform = ~transform if transform is not None else None
+            base_w = max(1, ortho_cache.get("width", 0))
+            base_h = max(1, ortho_cache.get("height", 0))
+            scale_x = img.width / base_w
+            scale_y = img.height / base_h
+            if inv_transform is not None and base_w and base_h:
+                for det in processing_state["results"]:
+                    x = det.get("center_x")
+                    y = det.get("center_y")
+                    if x is None or y is None:
+                        continue
+                    px, py = inv_transform * (x, y)
+                    px *= scale_x
+                    py *= scale_y
+                    if px < 0 or py < 0 or px > img.width or py > img.height:
+                        continue
+                    r = 4
+                    color = colors.get(det.get("cls"), (148, 163, 184))
+                    draw.ellipse((px - r, py - r, px + r, py + r), fill=color, outline=(255, 255, 255))
+        except Exception as e:
+            print(f"[Preview] Detection overlay failed: {e}")
 
     buffer = io.BytesIO()
     img.save(buffer, format="JPEG", quality=min(95, max(1, quality)), optimize=True)
@@ -1069,6 +1195,9 @@ async def start_processing(request: ProcessingRequest = None):
                 update_progress(70, "Height analysis...")
                 detections = compute_height_volume(detections, update_progress)
 
+            # Export combined visualization
+            write_combined_detection_image(detections)
+
             # Landcover segmentation (80-95%)
             if request.include_landcover:
                 update_progress(80, "Loading UPerNet model...")
@@ -1229,6 +1358,43 @@ async def export_stats():
         "cone": len([r for r in results if r.get("cls") == "cone"]),
     }
     return {"generated_at": datetime.now().isoformat(), "summary": stats, "detections": results}
+
+
+@app.get("/api/export/geojson")
+async def export_geojson():
+    results = convert_numpy(processing_state["results"])
+    features = []
+    crs_name = str(ortho_cache["crs"]) if ortho_cache.get("crs") else None
+    allowed_keys = {
+        "id",
+        "cls",
+        "score",
+        "center_x",
+        "center_y",
+        "area_m2",
+        "elev_z",
+        "height_m",
+    }
+    for det in results:
+        x = det.get("center_x")
+        y = det.get("center_y")
+        if x is None or y is None:
+            continue
+        properties = {k: v for k, v in det.items() if k in allowed_keys}
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [x, y]},
+            "properties": properties,
+        })
+
+    payload = {
+        "type": "FeatureCollection",
+        "features": features,
+        "generated_at": datetime.now().isoformat(),
+    }
+    if crs_name:
+        payload["crs"] = {"type": "name", "properties": {"name": crs_name}}
+    return payload
 
 
 # ============================================

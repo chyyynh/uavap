@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button'
 import { DashboardCard } from './DashboardCard'
 
 interface ExportOption {
-  id: 'stats' | 'pdf' | 'gpkg'
+  id: 'stats' | 'pdf' | 'geojson'
   label: string
   subtitle?: string
   icon: any
@@ -23,14 +23,18 @@ interface ExportOption {
 }
 
 interface ExportReportCardProps {
+  onExportStats: () => void
   onExportPdf: () => void
+  onExportGeojson: () => void
   isExporting: boolean
   canExport: boolean
   hasResults: boolean
 }
 
 function ExportReportCard({
+  onExportStats,
   onExportPdf,
+  onExportGeojson,
   isExporting,
   canExport,
   hasResults,
@@ -42,7 +46,7 @@ function ExportReportCard({
   const exportOptions: ExportOption[] = [
     { id: 'stats', label: '統計摘要', icon: ChartHistogramIcon, enabled: true },
     { id: 'pdf', label: '報表', subtitle: 'PDF', icon: FileExportIcon, enabled: true },
-    { id: 'gpkg', label: 'GIS 圖層', subtitle: 'GeoPackage', icon: Layers01Icon, enabled: true },
+    { id: 'geojson', label: 'GIS 圖層', subtitle: 'GeoJSON', icon: Layers01Icon, enabled: true },
   ]
 
   const toggleFormat = (id: string) => {
@@ -58,8 +62,14 @@ function ExportReportCard({
   }
 
   const handleExport = () => {
+    if (selectedFormats.has('stats')) {
+      onExportStats()
+    }
     if (selectedFormats.has('pdf')) {
       onExportPdf()
+    }
+    if (selectedFormats.has('geojson')) {
+      onExportGeojson()
     }
   }
 

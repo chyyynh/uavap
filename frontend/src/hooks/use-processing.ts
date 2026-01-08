@@ -168,7 +168,7 @@ export function useProcessing(): UseProcessingReturn {
           include_landcover: options.changeEnabled,
           output_stats: options.statsEnabled,
           output_pdf: options.pdfEnabled,
-          output_gpkg: options.gpkgEnabled,
+          output_geojson: options.geojsonEnabled,
         }),
       })
       const data = await response.json()
@@ -186,7 +186,7 @@ export function useProcessing(): UseProcessingReturn {
       console.error('??Failed to start process:', error)
       setIsRunning(false)
     }
-  }, [buildSteps, isRunning, options.changeEnabled, options.coneEnabled, options.geoEnabled, options.gpkgEnabled, options.pdfEnabled, options.personEnabled, options.statsEnabled, options.vehicleEnabled, pollStatus])
+  }, [buildSteps, isRunning, options.changeEnabled, options.coneEnabled, options.geoEnabled, options.geojsonEnabled, options.pdfEnabled, options.personEnabled, options.statsEnabled, options.vehicleEnabled, pollStatus])
 
   const reset = React.useCallback(() => {
     if (pollingRef.current) {

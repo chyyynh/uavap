@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import * as React from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -29,27 +29,24 @@ import { useUploadFile, useUploadLocalPaths } from '@/api/queries'
 import { Input } from '@/components/ui/input'
 
 const DETECTION_TARGETS = [
-  { key: 'personEnabled' as const, label: '人', icon: UserIcon },
+  { key: 'personEnabled' as const, label: '人員', icon: UserIcon },
   { key: 'vehicleEnabled' as const, label: '車輛', icon: Car01Icon },
   { key: 'coneEnabled' as const, label: '交通錐', icon: Cone01Icon },
 ]
-
 const ANALYSIS_OPTIONS = [
   {
     key: 'geoEnabled' as const,
-    label: '高程與高度',
-    helpText: '在屬性表新增 elev_z（中心點高程）、height_m（相對地面高度）',
-    subtitle: '點雲 / DSM',
+    title: '物件高度分析',
+    description: '',
+    helpText: 'AI 偵測成果，計算物件高度',
   },
   {
     key: 'changeEnabled' as const,
-    label: '地表變化偵測',
-    helpText:
-      '使用 UPerNet 模型進行土地覆蓋分類，包含：裸地、樹木、道路、鋪面、草地、建物',
-    subtitle: '土地覆蓋',
+    title: '環境地表分析',
+    description: '',
+    helpText: '土地覆蓋分類與地形特徵分析',
   },
 ]
-
 const FILE_UPLOAD_ITEMS: Array<{
   key: keyof UploadedFiles
   label: string
@@ -62,24 +59,23 @@ const FILE_UPLOAD_ITEMS: Array<{
     label: '正射影像',
     accept: '.tif,.tiff',
     icon: Image02Icon,
-    helpText: 'odm_orthophoto.tif',
+    helpText: '(.tif)',
   },
   {
     key: 'dsm',
-    label: 'DSM',
+    label: '數值高程模型',
     accept: '.tif,.tiff',
     icon: GridIcon,
-    helpText: 'dsm.tif - 數值高程模型',
+    helpText: '(.tif)',
   },
   {
     key: 'laz',
     label: '點雲',
     accept: '.laz,.las',
     icon: GridIcon,
-    helpText: 'odm_georeferenced_model.laz',
+    helpText: '(.laz)',
   },
 ]
-
 function TaskSelectionSection() {
   const { options, setOption, fileMode, setFileMode, bumpCacheBust, uploadedFiles, setUploadedFile, requiredFiles } =
     useTaskOptionsContext()
@@ -215,10 +211,10 @@ function TaskSelectionSection() {
             >
               <div className="flex items-center gap-2">
                 <span className="text-sm text-(--uav-text)">
-                  {option.label}
-                  {option.subtitle && (
+                  {option.title}
+                  {option.description && (
                     <span className="ml-1.5 text-xs text-(--uav-text-tertiary)">
-                      {option.subtitle}
+                      {option.description}
                     </span>
                   )}
                 </span>
@@ -257,7 +253,7 @@ function TaskSelectionSection() {
           {fileMode === 'local' && (
             <div className="mb-3">
               <span className="mb-2 block text-xs text-(--uav-text-tertiary)">
-                Local project dir
+                Project 資料夾路徑
               </span>
               <Input
                 value={localProjectDir}
@@ -276,10 +272,10 @@ function TaskSelectionSection() {
                 type="button"
                 onClick={() => switchMode('upload')}
                 className={cn(
-                  'px-2 py-1 text-[10px] font-medium uppercase tracking-wider transition-all',
+                  'px-2 py-1 text-[10px] font-medium text-(--uav-text-secondary) uppercase tracking-wider transition-all',
                   fileMode === 'upload'
-                    ? 'bg-(--uav-teal)/20 text-(--uav-teal)'
-                    : 'bg-transparent text-(--uav-text-tertiary) hover:text-(--uav-text-secondary)',
+                    ? 'bg-(--uav-teal)/20'
+                    : 'bg-transparent hover:text-(--uav-text-secondary)',
                 )}
               >
                 Upload
@@ -288,10 +284,10 @@ function TaskSelectionSection() {
                 type="button"
                 onClick={() => switchMode('local')}
                 className={cn(
-                  'px-2 py-1 text-[10px] font-medium uppercase tracking-wider transition-all',
+                  'px-2 py-1 text-[10px] font-medium text-(--uav-text-secondary) uppercase tracking-wider transition-all',
                   fileMode === 'local'
-                    ? 'bg-(--uav-teal)/20 text-(--uav-teal)'
-                    : 'bg-transparent text-(--uav-text-tertiary) hover:text-(--uav-text-secondary)',
+                    ? 'bg-(--uav-teal)/20'
+                    : 'bg-transparent hover:text-(--uav-text-secondary)',
                 )}
               >
                 Local
@@ -299,7 +295,7 @@ function TaskSelectionSection() {
             </div>
           </div>
           <span className="mb-2 block text-xs text-(--uav-text-tertiary) hidden">
-            檔案上傳
+            瑼?銝
           </span>
           <div className="space-y-2">
             {FILE_UPLOAD_ITEMS.map((item) => {
@@ -323,19 +319,19 @@ function TaskSelectionSection() {
                     icon={isUploaded ? CheckmarkCircle02Icon : item.icon}
                     strokeWidth={1.5}
                     className={cn(
-                      'size-5',
+                      'size-5 shrink-0',
                       isUploaded
-                        ? 'text-(--uav-teal)'
-                        : 'text-(--uav-text-tertiary)',
+                        ? 'text-[var(--uav-teal)]'
+                        : 'text-[var(--uav-text-tertiary)]',
                     )}
                   />
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-(--uav-text)">
+                      <span className="min-w-0 truncate whitespace-nowrap text-sm text-(--uav-text)">
                         {item.label}
                       </span>
                       {fileInfo && fileMode === 'upload' && (
-                        <span className="truncate text-xs text-(--uav-text-tertiary)">
+                        <span className="min-w-0 truncate text-xs text-(--uav-text-tertiary)">
                           {fileInfo.name}
                         </span>
                       )}
@@ -347,12 +343,17 @@ function TaskSelectionSection() {
                     )}
                   </div>
                   {fileMode === 'local' ? (
-                    <Input
-                      value={localNames[item.key] ?? ''}
-                      onChange={handleLocalNameChange(item.key)}
-                      placeholder="Filename"
-                      className="h-7 text-xs"
-                    />
+                    <div className="flex min-w-0 flex-col gap-1">
+                      <span className="text-[10px] text-(--uav-text-tertiary)">
+                        {item.label}
+                      </span>
+                      <Input
+                        value={localNames[item.key] ?? ''}
+                        onChange={handleLocalNameChange(item.key)}
+                        placeholder="Filename"
+                        className="h-7 w-full max-w-[200px] min-w-0 text-xs"
+                      />
+                    </div>
                   ) : (
                     <>
                     <input
@@ -368,8 +369,10 @@ function TaskSelectionSection() {
                     type="button"
                     onClick={() => fileInputRefs.current[item.key]?.click()}
                     disabled={uploadMutation.isPending}
+                    aria-label={isUploaded ? '更換' : '上傳'}
+                    title={isUploaded ? '更換' : '上傳'}
                     className={cn(
-                      'flex items-center gap-1.5 rounded-(--uav-radius-xs) px-2 py-1 text-xs transition-all',
+                      'flex shrink-0 items-center gap-1.5 rounded-(--uav-radius-xs) px-2 py-1 text-xs transition-all',
                       isUploaded
                         ? 'bg-transparent text-(--uav-text-secondary) hover:text-(--uav-text)'
                         : 'bg-(--uav-teal)/10 text-(--uav-teal) hover:bg-(--uav-teal)/20',
@@ -382,7 +385,6 @@ function TaskSelectionSection() {
                       strokeWidth={2}
                       className="size-3.5"
                     />
-                    {isUploaded ? '更換' : '上傳'}
                   </button>
                     </>
                   )}
@@ -415,3 +417,5 @@ function TaskSelectionSection() {
 }
 
 export { TaskSelectionSection }
+
+

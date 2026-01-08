@@ -11,7 +11,7 @@ interface TaskOptions {
   changeEnabled: boolean
   statsEnabled: boolean
   pdfEnabled: boolean
-  gpkgEnabled: boolean
+  geojsonEnabled: boolean
 }
 
 interface UseTaskOptionsReturn {
@@ -31,7 +31,7 @@ export function useTaskOptions(): UseTaskOptionsReturn {
     changeEnabled: false,
     statsEnabled: true,
     pdfEnabled: true,
-    gpkgEnabled: false,
+    geojsonEnabled: false,
   })
 
   const setOption = React.useCallback(
@@ -55,9 +55,9 @@ export function useTaskOptions(): UseTaskOptionsReturn {
     const parts: string[] = []
     if (options.statsEnabled) parts.push('Stats')
     if (options.pdfEnabled) parts.push('PDF')
-    if (options.gpkgEnabled) parts.push('GPKG')
+    if (options.geojsonEnabled) parts.push('GeoJSON')
     return parts.length > 0 ? parts.join(' + ') : 'None'
-  }, [options.statsEnabled, options.pdfEnabled, options.gpkgEnabled])
+  }, [options.statsEnabled, options.pdfEnabled, options.geojsonEnabled])
 
   const fieldText = React.useMemo(() => {
     return options.geoEnabled ? '+ elev_z / height_m' : 'No elev/height'

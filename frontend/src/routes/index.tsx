@@ -29,6 +29,8 @@ import { useTaskOptionsContext } from '@/contexts/TaskOptionsContext'
 import { useProcessing } from '@/hooks/use-processing'
 import { useLayerVisibility } from '@/hooks/use-layer-visibility'
 import { usePdfExport } from '@/hooks/use-pdf-export'
+import { useGeojsonExport } from '@/hooks/use-geojson-export'
+import { useStatsExport } from '@/hooks/use-stats-export'
 import type { ObjectClass } from '@/types/detection'
 
 export const Route = createFileRoute('/')({
@@ -57,6 +59,8 @@ function Dashboard() {
   const aspectUrl = terrainStatus?.computed ? getAspectImageUrl(cacheBust) : null
   const { isRunning, progress, elapsed, steps, currentStep, run } = useProcessing()
   const { visibility, toggle, enable } = useLayerVisibility()
+  const { exportGeojson, isExporting: isExportingGeojson } = useGeojsonExport(objects, tiffMetadata?.crs)
+  const { exportStats, isExporting: isExportingStats } = useStatsExport(objects)
   const { exportPdf, isExporting, canExport } = usePdfExport({
     mapRef,
     objects,
@@ -127,8 +131,10 @@ function Dashboard() {
           <LandcoverStatsCard />
           <TerrainStatsCard />
           <ExportReportCard
+            onExportStats={exportStats}
             onExportPdf={exportPdf}
-            isExporting={isExporting}
+            onExportGeojson={exportGeojson}
+            isExporting={isExporting || isExportingGeojson || isExportingStats}
             canExport={canExport}
             hasResults={objects.length > 0}
           />

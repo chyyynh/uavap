@@ -87,7 +87,7 @@ function Topbar({ className, onProjectChange, selectedProjectId }: TopbarProps) 
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {/* API Connection */}
         <div className="flex items-center gap-1.5 rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] px-2.5 py-1.5">
           <HugeiconsIcon
@@ -148,7 +148,7 @@ function Topbar({ className, onProjectChange, selectedProjectId }: TopbarProps) 
 
         {/* GPU Status */}
         {gpuStatus && (
-          <div className="flex items-center gap-2 rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] px-2.5 py-1.5">
+          <div className="flex min-w-0 items-center gap-2 rounded-[var(--uav-radius-sm)] border border-[var(--uav-stroke)] bg-[var(--uav-panel-elevated)] px-2.5 py-1.5">
             <span
               className={cn(
                 'size-2 rounded-full',
@@ -157,7 +157,10 @@ function Topbar({ className, onProjectChange, selectedProjectId }: TopbarProps) 
                 gpuStatus.status === 'busy' && 'bg-[var(--uav-warning)]'
               )}
             />
-            <span className="text-xs text-[var(--uav-text-secondary)]">
+            <span
+              className="max-w-44 truncate text-xs text-[var(--uav-text-secondary)]"
+              title={`GPU: ${gpuStatus.name}`}
+            >
               GPU: {gpuStatus.name}
             </span>
           </div>

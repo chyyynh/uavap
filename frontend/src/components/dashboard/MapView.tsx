@@ -47,7 +47,7 @@ const MARKER_COLORS: Record<ObjectClass, string> = {
 }
 
 function fmt(v: number | null | undefined, decimals = 2): string {
-  if (v === null || v === undefined) return '—'
+  if (v === null || v === undefined) return '??'
   return v.toFixed(decimals)
 }
 

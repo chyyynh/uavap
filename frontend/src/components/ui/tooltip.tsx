@@ -23,7 +23,7 @@ function TooltipContent({
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            'z-[9999] max-w-[300px] rounded-[14px] border border-white/12 bg-[rgba(10,16,28,0.96)] px-3 py-2.5 text-[12.5px] leading-relaxed text-white/84 shadow-[0_18px_40px_rgba(0,0,0,0.45)]',
+            'z-[9999] max-w-[calc(100vw-24px)] sm:max-w-[300px] break-words rounded-[14px] border border-white/12 bg-[rgba(10,16,28,0.96)] px-3 py-2.5 text-[12.5px] leading-relaxed text-white/84 shadow-[0_18px_40px_rgba(0,0,0,0.45)]',
             'data-[starting-style]:opacity-0 data-[ending-style]:opacity-0',
             'data-[starting-style]:scale-95 data-[ending-style]:scale-95',
             className

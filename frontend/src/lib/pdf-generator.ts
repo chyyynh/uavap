@@ -447,7 +447,32 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
     doc.text('Map image unavailable', margin + imgWidth / 2 - 20, yPos + imgHeight / 2)
   }
 
-  yPos += imgHeight + 10
+  // Caption for detection map
+  doc.setFontSize(9)
+  doc.setTextColor(100, 116, 139)
+  doc.text('Combined YOLOv8 Object Detection (Overview)', margin, yPos + imgHeight + 4)
+
+  // Legend for detection map
+  const legendItems = [
+    { label: 'Person', count: summary.person, color: [59, 130, 246] },
+    { label: 'Vehicle', count: summary.vehicle, color: [34, 197, 94] },
+    { label: 'Cone', count: summary.cone, color: [249, 115, 22] },
+  ].filter((item) => item.count > 0)
+
+  if (legendItems.length > 0) {
+    const legendY = yPos + imgHeight + 10
+    let legendX = margin
+    doc.setFontSize(8)
+    doc.setTextColor(71, 85, 105)
+    legendItems.forEach((item) => {
+      doc.setFillColor(item.color[0], item.color[1], item.color[2])
+      doc.circle(legendX + 2, legendY - 1, 1.5, 'F')
+      doc.text(`${item.label} (${item.count})`, legendX + 6, legendY)
+      legendX += 34 + item.label.length * 2.2
+    })
+  }
+
+  yPos += imgHeight + 14
 
   // ============================================
   // 詳細資料表格

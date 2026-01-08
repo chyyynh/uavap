@@ -357,7 +357,7 @@ export interface ProcessingRequest {
   include_landcover: boolean
   output_stats: boolean
   output_pdf: boolean
-  output_gpkg: boolean
+  output_geojson: boolean
 }
 
 /**
