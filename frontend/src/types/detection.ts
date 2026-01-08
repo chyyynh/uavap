@@ -10,6 +10,8 @@ export interface DetectionObject {
   aspect_rat: number
   elev_z: number
   height_m: number
+  volume_m3?: number | null
+  volume_reason?: string | null
   lat: number
   lon: number
 }
@@ -31,6 +33,25 @@ export interface ProcessingStep {
   name: string
   status: ProcessingStepStatus
   elapsed?: number
+}
+
+export interface ProcessingLogEntry {
+  timestamp: string
+  event: 'run_start' | 'step_status' | 'run_done' | 'run_error' | 'no_log'
+  status: ProcessingStepStatus | 'running'
+  step?: string
+  inputs?: {
+    file_mode?: 'upload' | 'local'
+    detect_person?: boolean
+    detect_vehicle?: boolean
+    detect_cone?: boolean
+    include_elevation?: boolean
+    include_landcover?: boolean
+    output_stats?: boolean
+    output_pdf?: boolean
+    output_geojson?: boolean
+  }
+  outputs?: string[]
 }
 
 export interface TaskOption {

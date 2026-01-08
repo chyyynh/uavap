@@ -340,9 +340,15 @@ function ObjectMarker({
           <br />
           score: {fmt(object.score, 3)}
           <br />
+          center_x: {fmt(object.center_x, 2)}
+          <br />
+          center_y: {fmt(object.center_y, 2)}
+          <br />
           elev_z: {fmt(object.elev_z, 2)} m
           <br />
           height_m: {fmt(object.height_m, 2)} m
+          <br />
+          volume_m3: {fmt(object.volume_m3, 2)} m³
         </div>
       </Popup>
     </CircleMarker>

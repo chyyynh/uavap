@@ -39,14 +39,17 @@ function generatePieChartSvg(
   height: number
 ): string {
   const cx = width / 2
-  const cy = height / 2 - 20 // Leave space for legend at bottom
-  const radius = Math.min(cx, cy) - 10
+  const titleHeight = 20
+  const legendHeight = 45
+  const availableHeight = height - titleHeight - legendHeight
+  const cy = titleHeight + availableHeight / 2
+  const radius = Math.min(cx, availableHeight / 2) - 6
 
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">`
   svg += `<rect width="${width}" height="${height}" fill="white"/>`
 
   // Title
-  svg += `<text x="${cx}" y="20" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="bold" fill="#1e293b">Land Cover Distribution</text>`
+  svg += `<text x="${cx}" y="16" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="bold" fill="#1e293b">Land Cover Distribution</text>`
 
   let startAngle = -90 // Start from top
   const total = data.reduce((sum, d) => sum + d.value, 0)
@@ -89,7 +92,7 @@ function generatePieChartSvg(
   })
 
   // Legend at bottom
-  const legendY = height - 45
+  const legendY = height - legendHeight + 4
   const legendItemWidth = width / Math.min(data.length, 3)
   let row = 0
   data.filter(d => d.value > 0).forEach((item, i) => {
@@ -280,6 +283,19 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
   const contentWidth = pageWidth - margin * 2
 
   let yPos = margin
+  const ensureSpace = (requiredHeight: number) => {
+    if (yPos + requiredHeight > pageHeight - margin) {
+      doc.addPage()
+      yPos = margin
+    }
+  }
+  const ensureSpaceAt = (cursorY: number, requiredHeight: number) => {
+    if (cursorY + requiredHeight > pageHeight - margin) {
+      doc.addPage()
+      return margin
+    }
+    return cursorY
+  }
 
   // ============================================
   // 標題區塊
@@ -354,6 +370,8 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
   })
 
   yPos += cardHeight + 12
+  const mapBlockHeight = 102
+  ensureSpace(mapBlockHeight)
 
   // ============================================
   // 地圖截圖區塊
@@ -472,7 +490,8 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
     })
   }
 
-  yPos += imgHeight + 14
+  yPos += imgHeight + 22
+  ensureSpace(20)
 
   // ============================================
   // 詳細資料表格
@@ -490,21 +509,21 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
       'ID',
       'Class',
       'Score',
-      'Latitude',
-      'Longitude',
+      'Center X',
+      'Center Y',
       'Elev (m)',
       'Height (m)',
-      'Area (m²)',
+      'Volume (m³)',
     ]],
     body: objects.map((obj) => [
       obj.id,
       obj.cls,
       fmt(obj.score, 3),
-      fmt(obj.lat, 6),
-      fmt(obj.lon, 6),
+      fmt(obj.center_x, 2),
+      fmt(obj.center_y, 2),
       fmt(obj.elev_z, 2),
       fmt(obj.height_m, 2),
-      fmt(obj.area_m2, 2),
+      fmt(obj.volume_m3, 2),
     ]),
     theme: 'striped',
     headStyles: {
@@ -524,11 +543,11 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
       0: { cellWidth: 12 },
       1: { cellWidth: 18 },
       2: { cellWidth: 16 },
-      3: { cellWidth: 28 },
-      4: { cellWidth: 28 },
+      3: { cellWidth: 24 },
+      4: { cellWidth: 24 },
       5: { cellWidth: 18 },
       6: { cellWidth: 20 },
-      7: { cellWidth: 20 },
+      7: { cellWidth: 22 },
     },
     margin: { left: margin, right: margin },
     styles: {
@@ -549,8 +568,8 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
     doc.addPage()
     currentY = margin
 
-    // Section header with green background
-    doc.setFillColor(34, 139, 34) // Forest green
+    // Section header aligned with report primary color
+    doc.setFillColor(30, 41, 59)
     doc.rect(0, 0, pageWidth, 35, 'F')
     doc.setTextColor(255, 255, 255)
     doc.setFontSize(16)
@@ -568,11 +587,13 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
     doc.setFontSize(9)
     doc.setFont('helvetica', 'normal')
     doc.text(`Resolution: ${(pixelW * 100).toFixed(1)}cm x ${(pixelH * 100).toFixed(1)}cm per pixel`, margin, currentY)
-    currentY += 8
+    currentY += 12
 
     // === Pie Chart (left side) ===
     const chartWidth = 80
     const chartHeight = 90
+    currentY = ensureSpaceAt(currentY, chartHeight + 28)
+    const chartY = currentY + 16
 
     // Prepare pie chart data
     const pieData = Object.entries(landcoverStats.stats)
@@ -589,7 +610,7 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
     try {
       const piePng = await convertSvgToPng(pieSvg, chartWidth * 3, chartHeight * 3)
       if (piePng) {
-        doc.addImage(piePng, 'PNG', margin, currentY, chartWidth, chartHeight)
+        doc.addImage(piePng, 'PNG', margin, chartY, chartWidth, chartHeight)
         console.log('[PDF Generator] Pie chart added successfully')
       }
     } catch (e) {
@@ -605,23 +626,26 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
       // Image border
       doc.setDrawColor(226, 232, 240)
       doc.setLineWidth(0.5)
-      doc.rect(imgX, currentY, imgWidth, imgHeight)
+      doc.rect(imgX, chartY, imgWidth, imgHeight)
 
       try {
-        doc.addImage(landcoverImageBase64, 'PNG', imgX, currentY, imgWidth, imgHeight)
+        doc.addImage(landcoverImageBase64, 'PNG', imgX, chartY, imgWidth, imgHeight)
         console.log('[PDF Generator] Landcover image added successfully')
       } catch (e) {
         console.warn('[PDF Generator] Landcover image failed:', e)
         // Show placeholder
         doc.setFillColor(248, 250, 252)
-        doc.rect(imgX, currentY, imgWidth, imgHeight, 'F')
+        doc.rect(imgX, chartY, imgWidth, imgHeight, 'F')
         doc.setTextColor(148, 163, 184)
         doc.setFontSize(10)
-        doc.text('Landcover image unavailable', imgX + 20, currentY + imgHeight / 2)
+        doc.text('Landcover image unavailable', imgX + 20, chartY + imgHeight / 2)
       }
     }
 
-    currentY += chartHeight + 10
+    currentY = chartY + chartHeight + 18
+    doc.setDrawColor(226, 232, 240)
+    doc.setLineWidth(0.4)
+    doc.line(margin, currentY - 6, pageWidth - margin, currentY - 6)
 
     // === Area Statistics Table ===
     doc.setTextColor(30, 41, 59)
@@ -629,6 +653,7 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
     doc.setFont('helvetica', 'bold')
     doc.text('Coverage Statistics', margin, currentY)
     currentY += 5
+    currentY = ensureSpaceAt(currentY, 30)
 
     // Prepare table data with area calculation
     const landcoverTableData = Object.entries(landcoverStats.stats)
@@ -660,7 +685,7 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
       body: landcoverTableData,
       theme: 'striped',
       headStyles: {
-        fillColor: [34, 139, 34], // Forest green for landcover
+        fillColor: [30, 41, 59],
         textColor: [255, 255, 255],
         fontSize: 9,
         fontStyle: 'bold',
@@ -699,22 +724,20 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
   // Terrain Statistics (if available)
   // ============================================
   if (terrainStats) {
-    // Check if we need a new page
-    if (currentY > pageHeight - 100) {
-      doc.addPage()
-      currentY = margin
-    } else {
-      currentY += 10
-    }
-
-    doc.setTextColor(30, 41, 59)
-    doc.setFontSize(12)
+    doc.addPage()
+    currentY = margin
+    doc.setFillColor(30, 41, 59)
+    doc.rect(margin, currentY, contentWidth, 10, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(11)
     doc.setFont('helvetica', 'bold')
-    doc.text('Terrain Analysis', margin, currentY)
-    currentY += 8
+    doc.text('Terrain Analysis', margin + 3, currentY + 7)
+    currentY += 16
+    doc.setTextColor(30, 41, 59)
 
     // Elevation statistics
     if (terrainStats.elevation) {
+      currentY = ensureSpaceAt(currentY, 28)
       doc.setFontSize(10)
       doc.setFont('helvetica', 'bold')
       doc.text('Elevation', margin, currentY)
@@ -751,6 +774,7 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
 
     // Slope distribution
     if (terrainStats.slope?.distribution) {
+      currentY = ensureSpaceAt(currentY, 28)
       currentY += 5
       doc.setFontSize(10)
       doc.setFont('helvetica', 'bold')
@@ -794,6 +818,7 @@ export async function generatePdfReport(options: PdfReportOptions): Promise<void
 
     // Aspect distribution
     if (terrainStats.aspect?.distribution) {
+      currentY = ensureSpaceAt(currentY, 28)
       currentY += 5
       doc.setFontSize(10)
       doc.setFont('helvetica', 'bold')

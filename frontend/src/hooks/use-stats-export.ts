@@ -43,7 +43,11 @@ export function useStatsExport(objects: DetectionObject[]) {
       const local = JSON.stringify({
         generated_at: new Date().toISOString(),
         summary: summarize(objects),
-        detections: objects,
+        detections: objects.map((o) => ({
+          ...o,
+          volume_m3: o.volume_m3 ?? null,
+          volume_reason: o.volume_reason ?? null,
+        })),
       }, null, 2)
       download('stats.json', local)
       notify.success('Stats exported', 'stats.json')

@@ -38,7 +38,9 @@ function HoverCard({ object, position }: HoverCardProps) {
       <div className="space-y-1">
         <HoverRow label="ID" value={String(object.id)} />
         <HoverRow label="Score" value={fmt(object.score, 3)} />
-        <HoverRow label="Area" value={`${fmt(object.area_m2, 2)} m²`} />
+        <HoverRow label="Center X" value={fmt(object.center_x, 2)} />
+        <HoverRow label="Center Y" value={fmt(object.center_y, 2)} />
+        <HoverRow label="Volume" value={`${fmt(object.volume_m3, 2)} m³`} />
         <HoverRow label="Elevation" value={`${fmt(object.elev_z, 2)} m`} />
         <HoverRow label="Height" value={`${fmt(object.height_m, 2)} m`} />
       </div>

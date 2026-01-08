@@ -42,6 +42,8 @@ function Dashboard() {
   const [selectedObjectId, setSelectedObjectId] = React.useState<number | null>(null)
   const [filter, setFilter] = React.useState<ObjectClass | 'all'>('all')
   const [status, setStatus] = React.useState('Ready')
+  const terrainAutoEnabledRef = React.useRef(false)
+  const landcoverAutoRefetchRef = React.useRef(false)
 
   const mapRef = React.useRef<LeafletMap | null>(null)
 
@@ -49,15 +51,21 @@ function Dashboard() {
   const { data: orthoBounds } = useOrthoBounds()
   const { data: tiffMetadata } = useTiffMetadata()
   const { data: landcoverStatus } = useLandcoverStatus()
-  const { data: landcoverStats } = useLandcoverStats()
+  const { data: landcoverStats, refetch: refetchLandcoverStats } = useLandcoverStats()
   const { data: terrainStatus } = useTerrainStatus()
   const { data: terrainStats } = useTerrainStats()
-  const { cacheBust } = useTaskOptionsContext()
+  const { cacheBust, options } = useTaskOptionsContext()
   const orthoUrl = getOrthoImageUrl(cacheBust)
-  const landcoverUrl = landcoverStatus?.computed ? getLandcoverOverlayUrl(0.5, cacheBust) : null
-  const slopeUrl = terrainStatus?.computed ? getSlopeImageUrl(cacheBust) : null
-  const aspectUrl = terrainStatus?.computed ? getAspectImageUrl(cacheBust) : null
-  const { isRunning, progress, elapsed, steps, currentStep, run } = useProcessing()
+  const landcoverUrl = options.changeEnabled && landcoverStatus?.computed
+    ? getLandcoverOverlayUrl(0.5, cacheBust)
+    : null
+  const slopeUrl = options.changeEnabled && terrainStatus?.computed
+    ? getSlopeImageUrl(cacheBust)
+    : null
+  const aspectUrl = options.changeEnabled && terrainStatus?.computed
+    ? getAspectImageUrl(cacheBust)
+    : null
+  const { isRunning, progress, elapsed, steps, currentStep, run, downloadLog } = useProcessing()
   const { visibility, toggle, enable } = useLayerVisibility()
   const { exportGeojson, isExporting: isExportingGeojson } = useGeojsonExport(objects, tiffMetadata?.crs)
   const { exportStats, isExporting: isExportingStats } = useStatsExport(objects)
@@ -65,14 +73,28 @@ function Dashboard() {
     mapRef,
     objects,
     metadata: tiffMetadata,
-    landcoverStats,
-    terrainStats,
+    landcoverStats: options.changeEnabled ? landcoverStats : null,
+    terrainStats: options.changeEnabled ? terrainStats : null,
   })
 
   const handleRun = React.useCallback(() => {
     setStatus('Running...')
     run()
   }, [run])
+
+  React.useEffect(() => {
+    if (terrainStatus?.computed && !terrainAutoEnabledRef.current) {
+      enable('slope')
+      terrainAutoEnabledRef.current = true
+    }
+  }, [terrainStatus?.computed, enable])
+
+  React.useEffect(() => {
+    if (landcoverStatus?.computed && !landcoverStats && !landcoverAutoRefetchRef.current) {
+      landcoverAutoRefetchRef.current = true
+      refetchLandcoverStats()
+    }
+  }, [landcoverStatus?.computed, landcoverStats, refetchLandcoverStats])
 
   // 當處理完成時更新狀態
   React.useEffect(() => {
@@ -128,12 +150,13 @@ function Dashboard() {
             filter={filter}
             onFilterChange={setFilter}
           />
-          <LandcoverStatsCard />
-          <TerrainStatsCard />
+          {options.changeEnabled && <LandcoverStatsCard />}
+          {options.changeEnabled && <TerrainStatsCard />}
           <ExportReportCard
             onExportStats={exportStats}
             onExportPdf={exportPdf}
             onExportGeojson={exportGeojson}
+            onDownloadLog={() => downloadLog(projectName)}
             isExporting={isExporting || isExportingGeojson || isExportingStats}
             canExport={canExport}
             hasResults={objects.length > 0}

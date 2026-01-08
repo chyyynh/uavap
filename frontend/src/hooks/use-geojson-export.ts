@@ -19,9 +19,10 @@ function toGeojson(objects: DetectionObject[], crsName?: string) {
           score: o.score,
           center_x: o.center_x,
           center_y: o.center_y,
-          area_m2: o.area_m2,
           elev_z: o.elev_z,
           height_m: o.height_m,
+          volume_m3: o.volume_m3 ?? null,
+          volume_reason: o.volume_reason ?? null,
         },
       })),
     ...(crsName ? { crs: { type: 'name', properties: { name: crsName } } } : {}),
@@ -52,8 +53,16 @@ export function useGeojsonExport(objects: DetectionObject[], crsName?: string) {
       const apiUrl = getStoredApiUrl()
       const response = await fetch(`${apiUrl}/api/export/geojson`)
       if (response.ok) {
-        const text = await response.text()
-        download('detections.geojson', text)
+        const payload = await response.json()
+        // Ensure exported GeoJSON does not include area_m2.
+        if (payload?.features?.length) {
+          payload.features = payload.features.map((feature: any) => {
+            const props = { ...(feature.properties || {}) }
+            delete props.area_m2
+            return { ...feature, properties: props }
+          })
+        }
+        download('detections.geojson', JSON.stringify(payload, null, 2))
       } else {
         const local = JSON.stringify(toGeojson(objects, crsName), null, 2)
         download('detections.geojson', local)

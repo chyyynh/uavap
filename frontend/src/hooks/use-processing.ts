@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { ProcessingStep } from '@/types/detection'
+import type { ProcessingLogEntry, ProcessingStep } from '@/types/detection'
 import { getStoredApiUrl, orthoKeys } from '@/api/queries'
 import { useTaskOptionsContext } from '@/contexts/TaskOptionsContext'
 
@@ -14,11 +14,12 @@ interface UseProcessingReturn {
   currentStep: string
   run: () => void
   reset: () => void
+  downloadLog: (projectName?: string) => void
 }
 
 export function useProcessing(): UseProcessingReturn {
   const queryClient = useQueryClient()
-  const { options } = useTaskOptionsContext()
+  const { options, fileMode } = useTaskOptionsContext()
   const [isRunning, setIsRunning] = React.useState(false)
   const [progress, setProgress] = React.useState(0)
   const [elapsed, setElapsed] = React.useState(0)
@@ -27,6 +28,33 @@ export function useProcessing(): UseProcessingReturn {
   const pollingRef = React.useRef<NodeJS.Timeout | null>(null)
   const startTimeRef = React.useRef<number>(0)
   const stepsRef = React.useRef<ProcessingStep[]>([])
+  const logRef = React.useRef<ProcessingLogEntry[]>([])
+  const lastLogKeyRef = React.useRef<string>('')
+
+  const appendLog = React.useCallback((entry: Omit<ProcessingLogEntry, 'timestamp'>) => {
+    logRef.current.push({ ...entry, timestamp: new Date().toISOString() })
+  }, [])
+
+  const formatTimestamp = (date: Date) => {
+    const pad = (value: number) => String(value).padStart(2, '0')
+    return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+  }
+
+  const downloadLog = React.useCallback((projectName?: string) => {
+    const safeProjectName = (projectName || 'project').trim().replace(/\s+/g, '-')
+    const stamp = formatTimestamp(new Date())
+    const filename = `${safeProjectName}_${stamp}_log.json`
+    const payload = logRef.current.length
+      ? logRef.current
+      : [{ timestamp: new Date().toISOString(), event: 'no_log', status: 'pending' as const }]
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [])
 
   const buildSteps = React.useCallback((): ProcessingStep[] => {
     const items: ProcessingStep[] = []
@@ -48,6 +76,15 @@ export function useProcessing(): UseProcessingReturn {
     try {
       const response = await fetch(`${apiUrl}/api/process/status`)
       const data = await response.json()
+      const logKey = `${data.status || ''}|${data.current_step || ''}|${data.progress || 0}`
+      if (logKey !== lastLogKeyRef.current) {
+        lastLogKeyRef.current = logKey
+        appendLog({
+          event: 'step_status',
+          status: data.status || 'running',
+          step: data.current_step || undefined,
+        })
+      }
 
       setProgress(data.progress || 0)
       setCurrentStep(data.current_step || '')
@@ -68,6 +105,15 @@ export function useProcessing(): UseProcessingReturn {
       )
 
       if (data.status === 'done') {
+        appendLog({
+          event: 'run_done',
+          status: 'done',
+          outputs: [
+            options.statsEnabled ? 'stats.json' : null,
+            options.pdfEnabled ? 'report.pdf' : null,
+            options.geojsonEnabled ? 'detections.geojson' : null,
+          ].filter(Boolean) as string[],
+        })
         setIsRunning(false)
         setSteps((prev) => prev.map((s) => ({ ...s, status: 'done' as const })))
         queryClient.invalidateQueries({ queryKey: ['detections'] })
@@ -78,6 +124,7 @@ export function useProcessing(): UseProcessingReturn {
           pollingRef.current = null
         }
       } else if (data.status === 'error') {
+        appendLog({ event: 'run_error', status: 'error', step: data.current_step || undefined })
         setIsRunning(false)
         setSteps((prev) =>
           prev.map((s, i) =>
@@ -101,6 +148,23 @@ export function useProcessing(): UseProcessingReturn {
 
     const apiUrl = getStoredApiUrl()
     console.log('?? Run clicked, API URL:', apiUrl || '(not connected, using mock)')
+    logRef.current = []
+    lastLogKeyRef.current = ''
+    appendLog({
+      event: 'run_start',
+      status: 'running',
+      inputs: {
+        file_mode: fileMode,
+        detect_person: options.personEnabled,
+        detect_vehicle: options.vehicleEnabled,
+        detect_cone: options.coneEnabled,
+        include_elevation: options.geoEnabled,
+        include_landcover: options.changeEnabled,
+        output_stats: options.statsEnabled,
+        output_pdf: options.pdfEnabled,
+        output_geojson: options.geojsonEnabled,
+      },
+    })
 
     if (!apiUrl) {
       console.log('?? Using mock mode')
@@ -116,6 +180,15 @@ export function useProcessing(): UseProcessingReturn {
 
       const runStep = (stepIndex: number) => {
         if (stepIndex >= stepDurations.length) {
+          appendLog({
+            event: 'run_done',
+            status: 'done',
+            outputs: [
+              options.statsEnabled ? 'stats.json' : null,
+              options.pdfEnabled ? 'report.pdf' : null,
+              options.geojsonEnabled ? 'detections.geojson' : null,
+            ].filter(Boolean) as string[],
+          })
           setIsRunning(false)
           return
         }
@@ -125,6 +198,7 @@ export function useProcessing(): UseProcessingReturn {
             i === stepIndex ? { ...s, status: 'running' as const } : s
           )
         )
+        appendLog({ event: 'step_status', status: 'running', step: nextSteps[stepIndex]?.name })
 
         setTimeout(() => {
           setSteps((prev) =>
@@ -134,6 +208,7 @@ export function useProcessing(): UseProcessingReturn {
                 : s
             )
           )
+          appendLog({ event: 'step_status', status: 'done', step: nextSteps[stepIndex]?.name })
           setProgress(Math.round(((stepIndex + 1) / stepDurations.length) * 100))
           setElapsed((performance.now() - startTime) / 1000)
           runStep(stepIndex + 1)
@@ -176,6 +251,7 @@ export function useProcessing(): UseProcessingReturn {
 
       if (data.error) {
         console.error('Process error:', data.error)
+        appendLog({ event: 'run_error', status: 'error' })
         setIsRunning(false)
         return
       }
@@ -184,9 +260,10 @@ export function useProcessing(): UseProcessingReturn {
       pollingRef.current = setInterval(pollStatus, 1000)
     } catch (error) {
       console.error('??Failed to start process:', error)
+      appendLog({ event: 'run_error', status: 'error' })
       setIsRunning(false)
     }
-  }, [buildSteps, isRunning, options.changeEnabled, options.coneEnabled, options.geoEnabled, options.geojsonEnabled, options.pdfEnabled, options.personEnabled, options.statsEnabled, options.vehicleEnabled, pollStatus])
+  }, [appendLog, buildSteps, fileMode, isRunning, options.changeEnabled, options.coneEnabled, options.geoEnabled, options.geojsonEnabled, options.pdfEnabled, options.personEnabled, options.statsEnabled, options.vehicleEnabled, pollStatus])
 
   const reset = React.useCallback(() => {
     if (pollingRef.current) {
@@ -200,6 +277,8 @@ export function useProcessing(): UseProcessingReturn {
     const nextSteps = buildSteps()
     stepsRef.current = nextSteps
     setSteps(nextSteps)
+    logRef.current = []
+    lastLogKeyRef.current = ''
   }, [buildSteps])
 
   React.useEffect(() => {
@@ -216,5 +295,5 @@ export function useProcessing(): UseProcessingReturn {
     }
   }, [])
 
-  return { isRunning, progress, elapsed, steps, currentStep, run, reset }
+  return { isRunning, progress, elapsed, steps, currentStep, run, reset, downloadLog }
 }

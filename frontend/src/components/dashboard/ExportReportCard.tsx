@@ -26,6 +26,7 @@ interface ExportReportCardProps {
   onExportStats: () => void
   onExportPdf: () => void
   onExportGeojson: () => void
+  onDownloadLog: () => void
   isExporting: boolean
   canExport: boolean
   hasResults: boolean
@@ -35,6 +36,7 @@ function ExportReportCard({
   onExportStats,
   onExportPdf,
   onExportGeojson,
+  onDownloadLog,
   isExporting,
   canExport,
   hasResults,
@@ -147,6 +149,18 @@ function ExportReportCard({
           className={cn('size-4', isExporting && 'animate-bounce')}
         />
         {isExporting ? 'Exporting...' : `Export${selectedCount > 0 ? ` (${selectedCount})` : ''}`}
+      </Button>
+      <Button
+        onClick={onDownloadLog}
+        disabled={isExporting}
+        className={cn(
+          'mt-2 w-full gap-2 rounded-[var(--uav-radius-sm)] py-2.5 text-sm font-semibold',
+          'bg-[var(--uav-panel-elevated)] text-[var(--uav-text)] hover:bg-[var(--uav-panel-elevated)]/80',
+          'disabled:cursor-not-allowed disabled:opacity-50'
+        )}
+      >
+        <HugeiconsIcon icon={Download04Icon} strokeWidth={2} className="size-4" />
+        Download Log
       </Button>
     </DashboardCard>
   )

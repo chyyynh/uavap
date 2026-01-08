@@ -155,7 +155,7 @@ rng = np.random.default_rng(42)
 # ============================================
 uploaded_files = {"ortho": None, "laz": None, "dsm": None, "ortho_ref": None, "dsm_ref": None}
 ortho_cache = {"src": None, "transform": None, "crs": None, "bounds": None, "width": 0, "height": 0, "pixel_w": 0, "pixel_h": 0}
-pointcloud_cache = {"X": None, "Y": None, "Z": None, "loaded": False}
+pointcloud_cache = {"X": None, "Y": None, "Z": None, "loaded": False, "sorted_x": None, "sorted_idx": None}
 dsm_cache = {"data": None, "transform": None, "crs": None, "loaded": False, "nodata": None}
 # 參考期資料（用於變化偵測）
 ref_ortho_cache = {"data": None, "transform": None, "loaded": False}
@@ -164,6 +164,7 @@ change_detection_cache = {"result": None, "computed": False}
 models_cache = {"loaded": False, "models": {}}
 upernet_cache = {"loaded": False, "model": None}
 landcover_cache = {"mask": None, "stats": None, "computed": False}
+terrain_cache = {"stats": None, "computed": False}
 processing_state = {"job_id": None, "status": "idle", "progress": 0, "current_step": "", "elapsed_seconds": 0, "results": [], "start_time": None}
 
 
@@ -171,7 +172,7 @@ def cleanup_all():
     """清除所有快取和刪除上傳的檔案"""
     global uploaded_files, ortho_cache, pointcloud_cache, dsm_cache
     global ref_ortho_cache, ref_dsm_cache, change_detection_cache
-    global landcover_cache, processing_state
+    global landcover_cache, terrain_cache, processing_state
 
     # 關閉 rasterio 資源
     if ortho_cache["src"] is not None:
@@ -181,23 +182,16 @@ def cleanup_all():
             pass
 
     # 刪除所有上傳的檔案
-    for key, filepath in uploaded_files.items():
-        if filepath and os.path.exists(filepath):
-            try:
-                os.remove(filepath)
-                print(f"[Cleanup] Deleted: {filepath}")
-            except Exception as e:
-                print(f"[Cleanup] Failed to delete {filepath}: {e}")
-
     # 重設所有快取
     uploaded_files.update({"ortho": None, "laz": None, "dsm": None, "ortho_ref": None, "dsm_ref": None})
     ortho_cache.update({"src": None, "transform": None, "crs": None, "bounds": None, "width": 0, "height": 0, "pixel_w": 0, "pixel_h": 0})
-    pointcloud_cache.update({"X": None, "Y": None, "Z": None, "loaded": False})
+    pointcloud_cache.update({"X": None, "Y": None, "Z": None, "loaded": False, "sorted_x": None, "sorted_idx": None})
     dsm_cache.update({"data": None, "transform": None, "crs": None, "loaded": False, "nodata": None})
     ref_ortho_cache.update({"data": None, "transform": None, "loaded": False})
     ref_dsm_cache.update({"data": None, "transform": None, "loaded": False})
     change_detection_cache.update({"result": None, "computed": False})
     landcover_cache.update({"mask": None, "stats": None, "computed": False})
+    terrain_cache.update({"stats": None, "computed": False})
     processing_state.update({"job_id": None, "status": "idle", "progress": 0, "current_step": "", "elapsed_seconds": 0, "results": [], "start_time": None})
 
     print("[Cleanup] All caches cleared")
@@ -372,6 +366,8 @@ def run_yolo_detection(classes_to_detect: list[str], progress_callback=None) -> 
             "px2": r["px2"], "py2": r["py2"],
             "elev_z": 0.0,
             "height_m": 0.0,
+            "volume_m3": None,
+            "volume_reason": None,
             "lat": 0.0,
             "lon": 0.0,
         })
@@ -623,11 +619,15 @@ def compute_height_volume(detections, progress_callback=None):
             cls = det["cls"] if det["cls"] != "vehicle" else "car"
             h, _ = impute_height_by_class(cls, np.nan, 0, 100)
             det["height_m"] = round(h, 2)
+            det["volume_m3"] = None
+            det["volume_reason"] = "no_pointcloud"
         return detections
 
     from shapely.geometry import box
     X, Y, Z = pointcloud_cache["X"], pointcloud_cache["Y"], pointcloud_cache["Z"]
     transform = ortho_cache["transform"]
+    sorted_x = pointcloud_cache.get("sorted_x")
+    sorted_idx = pointcloud_cache.get("sorted_idx")
 
     for det in detections:
         cls = det["cls"] if det["cls"] != "vehicle" else "car"
@@ -636,9 +636,15 @@ def compute_height_volume(detections, progress_callback=None):
         geom = box(min(px1, px2), min(py1, py2), max(px1, px2), max(py1, py2))
 
         minx, miny, maxx, maxy = geom.bounds
-        m = (X >= minx) & (X <= maxx) & (Y >= miny) & (Y <= maxy)
+        if sorted_x is not None and sorted_idx is not None:
+            left = np.searchsorted(sorted_x, minx, side="left")
+            right = np.searchsorted(sorted_x, maxx, side="right")
+            idx = sorted_idx[left:right]
+            m = idx[(Y[idx] >= miny) & (Y[idx] <= maxy)]
+        else:
+            m = np.where((X >= minx) & (X <= maxx) & (Y >= miny) & (Y <= maxy))[0]
 
-        if np.any(m):
+        if m.size:
             zz = Z[m]
             z0 = float(np.percentile(zz, 5))
             ztop = float(np.percentile(zz, 95))
@@ -646,9 +652,13 @@ def compute_height_volume(detections, progress_callback=None):
             h_fix, _ = impute_height_by_class(cls, h_raw, len(zz), MIN_PTS_BY_CLASS.get(cls, 30))
             det["height_m"] = round(h_fix, 2)
             det["elev_z"] = round(z0, 1)
+            det["volume_m3"] = round(det.get("area_m2", 0.0) * h_raw, 3)
+            det["volume_reason"] = None
         else:
             h, _ = impute_height_by_class(cls, np.nan, 0, 100)
             det["height_m"] = round(h, 2)
+            det["volume_m3"] = None
+            det["volume_reason"] = "no_points"
 
     return detections
 
@@ -720,9 +730,15 @@ def load_ortho_image(tiff_path):
 def load_point_cloud(laz_path):
     import laspy
     las = laspy.read(laz_path)
-    pointcloud_cache["X"] = np.asarray(las.x)
-    pointcloud_cache["Y"] = np.asarray(las.y)
-    pointcloud_cache["Z"] = np.asarray(las.z)
+    X = np.asarray(las.x)
+    Y = np.asarray(las.y)
+    Z = np.asarray(las.z)
+    pointcloud_cache["X"] = X
+    pointcloud_cache["Y"] = Y
+    pointcloud_cache["Z"] = Z
+    order = np.argsort(X)
+    pointcloud_cache["sorted_x"] = X[order]
+    pointcloud_cache["sorted_idx"] = order
     pointcloud_cache["loaded"] = True
     print(f"[PointCloud] Loaded {len(pointcloud_cache['Z'])} points")
 
@@ -774,6 +790,81 @@ def compute_terrain_analysis():
             "slope_max": float(np.nanmax(slope_deg)),
             "slope_min": float(np.nanmin(slope_deg)),
         }
+    }
+
+
+def compute_terrain_stats():
+    """Generate terrain statistics in the frontend-expected shape."""
+    if not dsm_cache["loaded"]:
+        raise ValueError("No DSM loaded. Upload DSM via /api/upload/dsm or /api/upload/local (project_dir + dsm_name).")
+
+    terrain = compute_terrain_analysis()
+    if terrain is None:
+        raise ValueError("Failed to compute terrain analysis")
+
+    dem = dsm_cache["data"]
+    nodata = dsm_cache["nodata"]
+    if nodata is not None:
+        dem = np.where(dem == nodata, np.nan, dem)
+
+    elevation = {
+        "min": float(np.nanmin(dem)),
+        "max": float(np.nanmax(dem)),
+        "mean": float(np.nanmean(dem)),
+        "std": float(np.nanstd(dem)),
+    }
+
+    slope = terrain["slope"]
+    aspect = terrain["aspect"]
+    valid_slope = ~np.isnan(slope)
+    valid_aspect = ~np.isnan(aspect)
+
+    def slope_bucket(mask):
+        count = int(np.sum(mask))
+        total = int(np.sum(valid_slope))
+        pct = round((count / total) * 100, 2) if total > 0 else 0
+        return {"count": count, "percentage": pct}
+
+    slope_distribution = {
+        "flat": slope_bucket((slope < 5) & valid_slope),
+        "gentle": slope_bucket((slope >= 5) & (slope < 15) & valid_slope),
+        "moderate": slope_bucket((slope >= 15) & (slope < 30) & valid_slope),
+        "steep": slope_bucket((slope >= 30) & valid_slope),
+    }
+
+    def aspect_bucket(lo, hi):
+        mask = (aspect >= lo) & (aspect < hi) & valid_aspect
+        count = int(np.sum(mask))
+        total = int(np.sum(valid_aspect))
+        pct = round((count / total) * 100, 2) if total > 0 else 0
+        return {"count": count, "percentage": pct}
+
+    aspect_distribution = {
+        "N": aspect_bucket(337.5, 360.0),
+        "NE": aspect_bucket(22.5, 67.5),
+        "E": aspect_bucket(67.5, 112.5),
+        "SE": aspect_bucket(112.5, 157.5),
+        "S": aspect_bucket(157.5, 202.5),
+        "SW": aspect_bucket(202.5, 247.5),
+        "W": aspect_bucket(247.5, 292.5),
+        "NW": aspect_bucket(292.5, 337.5),
+    }
+    aspect_distribution["N"]["count"] += int(np.sum((aspect < 22.5) & valid_aspect))
+    total_aspect = int(np.sum(valid_aspect))
+    if total_aspect > 0:
+        aspect_distribution["N"]["percentage"] = round((aspect_distribution["N"]["count"] / total_aspect) * 100, 2)
+
+    return {
+        "elevation": elevation,
+        "slope": {
+            "min": float(np.nanmin(slope)),
+            "max": float(np.nanmax(slope)),
+            "mean": float(np.nanmean(slope)),
+            "distribution": slope_distribution,
+        },
+        "aspect": {
+            "distribution": aspect_distribution,
+        },
     }
 
 
@@ -1037,23 +1128,6 @@ async def upload_file(file: UploadFile = File(...)):
         cleanup_all()
 
     # 刪除同類型的舊檔案
-    if filename.endswith((".tif", ".tiff")) and uploaded_files.get("ortho"):
-        old_path = uploaded_files["ortho"]
-        if old_path and os.path.exists(old_path) and old_path != str(file_path):
-            try:
-                os.remove(old_path)
-                print(f"[Upload] Deleted old ortho: {old_path}")
-            except:
-                pass
-    elif filename.endswith((".laz", ".las")) and uploaded_files.get("laz"):
-        old_path = uploaded_files["laz"]
-        if old_path and os.path.exists(old_path) and old_path != str(file_path):
-            try:
-                os.remove(old_path)
-                print(f"[Upload] Deleted old laz: {old_path}")
-            except:
-                pass
-
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
@@ -1076,13 +1150,6 @@ async def upload_dsm(file: UploadFile = File(...)):
 
     # 刪除舊的 DSM 檔案
     if uploaded_files.get("dsm"):
-        old_path = uploaded_files["dsm"]
-        if old_path and os.path.exists(old_path) and old_path != str(file_path):
-            try:
-                os.remove(old_path)
-                print(f"[Upload] Deleted old DSM: {old_path}")
-            except:
-                pass
         # 重設 DSM 快取
         dsm_cache.update({"data": None, "transform": None, "crs": None, "loaded": False, "nodata": None})
 
@@ -1259,23 +1326,36 @@ async def get_terrain_status():
     return {
         "dsm_loaded": dsm_cache["loaded"],
         "resolution": dsm_cache.get("resolution") if dsm_cache["loaded"] else None,
+        "computed": terrain_cache["computed"],
+        "has_stats": terrain_cache["stats"] is not None,
     }
 
 
+@app.post("/api/terrain/run")
+async def run_terrain():
+    if not dsm_cache["loaded"]:
+        raise HTTPException(status_code=400, detail="No DSM loaded. Upload DSM via /api/upload/dsm or /api/upload/local (project_dir + dsm_name).")
+
+    try:
+        stats = compute_terrain_stats()
+        terrain_cache["stats"] = stats
+        terrain_cache["computed"] = True
+        return convert_numpy({"status": "done", "stats": stats})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 @app.get("/api/terrain/stats")
 async def get_terrain_stats():
     """取得地形統計資料"""
     if not dsm_cache["loaded"]:
-        raise HTTPException(status_code=400, detail="No DSM loaded")
+        raise HTTPException(status_code=400, detail="No DSM loaded. Upload DSM via /api/upload/dsm or /api/upload/local (project_dir + dsm_name).")
 
-    terrain = compute_terrain_analysis()
-    if terrain is None:
-        raise HTTPException(status_code=500, detail="Failed to compute terrain analysis")
+    if terrain_cache["computed"] and terrain_cache["stats"] is not None:
+        return convert_numpy(terrain_cache["stats"])
 
-    return convert_numpy({
-        "resolution": dsm_cache.get("resolution"),
-        "stats": terrain["stats"],
-    })
+    stats = compute_terrain_stats()
+    terrain_cache["stats"] = stats
+    terrain_cache["computed"] = True
+    return convert_numpy(stats)
 
 
 @app.get("/api/terrain/point")
@@ -1365,15 +1445,17 @@ async def export_geojson():
     results = convert_numpy(processing_state["results"])
     features = []
     crs_name = str(ortho_cache["crs"]) if ortho_cache.get("crs") else None
+    # GeoJSON properties exclude area_m2; include center_x/center_y and volume.
     allowed_keys = {
         "id",
         "cls",
         "score",
         "center_x",
         "center_y",
-        "area_m2",
         "elev_z",
         "height_m",
+        "volume_m3",
+        "volume_reason",
     }
     for det in results:
         x = det.get("center_x")

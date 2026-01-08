@@ -13,6 +13,11 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { ArrowUp01Icon, ArrowDown01Icon } from '@hugeicons/core-free-icons'
 
 import { cn } from '@/lib/utils'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import type { DetectionObject } from '@/types/detection'
 
 interface DetectionTableProps {
@@ -56,10 +61,23 @@ const columns: ColumnDef<DetectionObject>[] = [
     cell: ({ getValue }) => fmt(getValue() as number, 4),
   },
   {
-    accessorKey: 'area_m2',
-    header: 'Area (m²)',
+    accessorKey: 'volume_m3',
+    header: 'Volume (m³)',
     size: 90,
-    cell: ({ getValue }) => fmt(getValue() as number, 2),
+    cell: ({ getValue, row }) => {
+      const value = getValue() as number | null | undefined
+      if (value === null || value === undefined) {
+        const reason = row.original.volume_reason
+        if (!reason) return '—'
+        return (
+          <Tooltip>
+            <TooltipTrigger render={<span>—</span>} />
+            <TooltipContent>{reason}</TooltipContent>
+          </Tooltip>
+        )
+      }
+      return fmt(value, 2)
+    },
   },
   {
     accessorKey: 'elev_z',
