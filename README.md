@@ -29,6 +29,12 @@ UAV Automated Inspection Platform (UAV AIP) dashboard.
 - Models: HuggingFace Hub
 - Image output: JPEG/PNG compression + HTTP cache
 
+## Architecture (Overview)
+
+- `frontend/`: Web UI (React) for uploading data, running tasks, and viewing results on the map.
+- `hf-space/`: FastAPI backend that serves APIs, runs inference, and provides map assets.
+- Frontend and backend are started separately during development.
+
 ## HuggingFace Resources
 
 | Resource | Link | Notes |
@@ -47,6 +53,8 @@ UAV Automated Inspection Platform (UAV AIP) dashboard.
 
 ## Quick Start
 
+This project has separate frontend and backend services. Start both for local development.
+
 ### Frontend
 
 ```bash
@@ -62,7 +70,7 @@ Default API: `https://chyyynh-uav-detection-api.hf.space`
 ```bash
 cd hf-space
 python -m venv .venv
-.\.venv\Scriptsctivate
+.\.venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 8000
 ```
@@ -162,6 +170,67 @@ uavap/
     requirements.txt
   notebooks/
 ```
+
+## Frontend (Detailed)
+
+### Prerequisites
+
+- Node.js + pnpm installed. (If you don’t have pnpm: `npm install -g pnpm`.)
+
+### Install + Run (Dev)
+
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
+
+### Build + Preview
+
+```bash
+cd frontend
+pnpm build
+pnpm preview
+```
+
+### Dev vs Build (Short)
+
+- `pnpm dev`: Development server with fast rebuilds and hot reload.
+- `pnpm build` + `pnpm preview`: Production build and local preview of the built output.
+
+## Backend (Detailed)
+
+### Prerequisites
+
+- Python (TODO: confirm exact version; typically 3.10+ for FastAPI/Geo stack).
+
+### Create Virtual Environment
+
+```bash
+cd hf-space
+python -m venv .venv
+.\.venv\Scripts\activate
+```
+
+### Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Run API
+
+```bash
+uvicorn app:app --host 0.0.0.0 --port 8000
+```
+
+Default API URL: `http://127.0.0.1:8000`
+
+## Recommended Dev Flow
+
+- Start backend first (API + model loading).
+- Start frontend with `pnpm dev`.
+- Use this flow for day-to-day development and demos.
 
 ## License
 
