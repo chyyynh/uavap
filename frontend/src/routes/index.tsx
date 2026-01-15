@@ -15,6 +15,7 @@ import { MapView } from '@/components/dashboard/MapView'
 import {
   useDetections,
   useOrthoBounds,
+  useAoiInfo,
   getOrthoImageUrl,
   useTiffMetadata,
   getLandcoverOverlayUrl,
@@ -49,6 +50,7 @@ function Dashboard() {
 
   const { data: objects = [] } = useDetections(selectedProjectId)
   const { data: orthoBounds } = useOrthoBounds()
+  const { data: aoiInfo } = useAoiInfo()
   const { data: tiffMetadata } = useTiffMetadata()
   const { data: landcoverStatus } = useLandcoverStatus()
   const { data: landcoverStats, refetch: refetchLandcoverStats } = useLandcoverStats()
@@ -174,6 +176,7 @@ function Dashboard() {
         onSelectObject={handleSelectObject}
         mapRef={mapRef}
         orthoBounds={orthoBounds}
+        aoiInfo={aoiInfo}
         orthoUrl={orthoUrl}
         landcoverUrl={landcoverUrl}
         slopeUrl={slopeUrl}

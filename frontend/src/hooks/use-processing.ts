@@ -19,7 +19,7 @@ interface UseProcessingReturn {
 
 export function useProcessing(): UseProcessingReturn {
   const queryClient = useQueryClient()
-  const { options, fileMode } = useTaskOptionsContext()
+  const { options, fileMode, uploadedFiles, aoiPoints, aoiCrs } = useTaskOptionsContext()
   const [isRunning, setIsRunning] = React.useState(false)
   const [progress, setProgress] = React.useState(0)
   const [elapsed, setElapsed] = React.useState(0)
@@ -148,6 +148,7 @@ export function useProcessing(): UseProcessingReturn {
 
     const apiUrl = getStoredApiUrl()
     console.log('?? Run clicked, API URL:', apiUrl || '(not connected, using mock)')
+    const aoiPayloadCrs = aoiPoints ? aoiCrs : null
     logRef.current = []
     lastLogKeyRef.current = ''
     appendLog({
@@ -163,6 +164,10 @@ export function useProcessing(): UseProcessingReturn {
         output_stats: options.statsEnabled,
         output_pdf: options.pdfEnabled,
         output_geojson: options.geojsonEnabled,
+        aoi_geojson_path: fileMode === 'local' && uploadedFiles.aoi?.uploaded ? uploadedFiles.aoi?.name : null,
+        aoi_geojson_file_id: fileMode === 'upload' && uploadedFiles.aoi?.uploaded ? uploadedFiles.aoi?.name : null,
+        aoi_points: aoiPoints,
+        aoi_crs: aoiPayloadCrs,
       },
     })
 
@@ -244,10 +249,17 @@ export function useProcessing(): UseProcessingReturn {
           output_stats: options.statsEnabled,
           output_pdf: options.pdfEnabled,
           output_geojson: options.geojsonEnabled,
+          aoi_geojson_path: fileMode === 'local' && uploadedFiles.aoi?.uploaded ? uploadedFiles.aoi?.name : null,
+          aoi_geojson_file_id: fileMode === 'upload' && uploadedFiles.aoi?.uploaded ? uploadedFiles.aoi?.name : null,
+          aoi_points: aoiPoints,
+          aoi_crs: aoiPayloadCrs,
         }),
       })
       const data = await response.json()
       console.log('??? API response:', data)
+      if (data?.aoi_mode !== undefined) {
+        console.log('[AOI] mode:', data.aoi_mode, 'aoi_crs:', data.aoi_crs, 'image_crs:', data.image_crs)
+      }
 
       if (data.error) {
         console.error('Process error:', data.error)
@@ -263,7 +275,7 @@ export function useProcessing(): UseProcessingReturn {
       appendLog({ event: 'run_error', status: 'error' })
       setIsRunning(false)
     }
-  }, [appendLog, buildSteps, fileMode, isRunning, options.changeEnabled, options.coneEnabled, options.geoEnabled, options.geojsonEnabled, options.pdfEnabled, options.personEnabled, options.statsEnabled, options.vehicleEnabled, pollStatus])
+  }, [appendLog, buildSteps, fileMode, isRunning, options.changeEnabled, options.coneEnabled, options.geoEnabled, options.geojsonEnabled, options.pdfEnabled, options.personEnabled, options.statsEnabled, options.vehicleEnabled, pollStatus, uploadedFiles, aoiPoints, aoiCrs])
 
   const reset = React.useCallback(() => {
     if (pollingRef.current) {

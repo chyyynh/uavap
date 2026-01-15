@@ -153,10 +153,26 @@ rng = np.random.default_rng(42)
 # ============================================
 # 全域狀態
 # ============================================
-uploaded_files = {"ortho": None, "laz": None, "dsm": None, "ortho_ref": None, "dsm_ref": None}
+uploaded_files = {"ortho": None, "laz": None, "dsm": None, "aoi": None, "ortho_ref": None, "dsm_ref": None}
 ortho_cache = {"src": None, "transform": None, "crs": None, "bounds": None, "width": 0, "height": 0, "pixel_w": 0, "pixel_h": 0}
 pointcloud_cache = {"X": None, "Y": None, "Z": None, "loaded": False, "sorted_x": None, "sorted_idx": None}
 dsm_cache = {"data": None, "transform": None, "crs": None, "loaded": False, "nodata": None}
+# AOI cache in ortho CRS + map CRS (EPSG:4326)
+aoi_cache = {
+    "geom": None,
+    "bbox": None,
+    "bbox_wgs84": None,
+    "geojson": None,
+    "crs": None,
+    "image_crs": None,
+    "input_geom_type": None,
+    "used_geom_type": None,
+    "buffer_m": None,
+    "assumed_crs": False,
+    "mode": None,
+    "loaded": False,
+    "path": None,
+}
 # 參考期資料（用於變化偵測）
 ref_ortho_cache = {"data": None, "transform": None, "loaded": False}
 ref_dsm_cache = {"data": None, "transform": None, "loaded": False}
@@ -170,7 +186,7 @@ processing_state = {"job_id": None, "status": "idle", "progress": 0, "current_st
 
 def cleanup_all():
     """清除所有快取和刪除上傳的檔案"""
-    global uploaded_files, ortho_cache, pointcloud_cache, dsm_cache
+    global uploaded_files, ortho_cache, pointcloud_cache, dsm_cache, aoi_cache
     global ref_ortho_cache, ref_dsm_cache, change_detection_cache
     global landcover_cache, terrain_cache, processing_state
 
@@ -183,10 +199,25 @@ def cleanup_all():
 
     # 刪除所有上傳的檔案
     # 重設所有快取
-    uploaded_files.update({"ortho": None, "laz": None, "dsm": None, "ortho_ref": None, "dsm_ref": None})
+    uploaded_files.update({"ortho": None, "laz": None, "dsm": None, "aoi": None, "ortho_ref": None, "dsm_ref": None})
     ortho_cache.update({"src": None, "transform": None, "crs": None, "bounds": None, "width": 0, "height": 0, "pixel_w": 0, "pixel_h": 0})
     pointcloud_cache.update({"X": None, "Y": None, "Z": None, "loaded": False, "sorted_x": None, "sorted_idx": None})
     dsm_cache.update({"data": None, "transform": None, "crs": None, "loaded": False, "nodata": None})
+    aoi_cache.update({
+        "geom": None,
+        "bbox": None,
+        "bbox_wgs84": None,
+        "geojson": None,
+        "crs": None,
+        "image_crs": None,
+        "input_geom_type": None,
+        "used_geom_type": None,
+        "buffer_m": None,
+        "assumed_crs": False,
+        "mode": None,
+        "loaded": False,
+        "path": None,
+    })
     ref_ortho_cache.update({"data": None, "transform": None, "loaded": False})
     ref_dsm_cache.update({"data": None, "transform": None, "loaded": False})
     change_detection_cache.update({"result": None, "computed": False})
@@ -207,11 +238,17 @@ class ProcessingRequest(BaseModel):
     include_elevation: bool = True
     include_terrain: bool = False  # 地形分析（需要 DSM）
     include_landcover: bool = False  # 土地覆蓋偵測（UPerNet）
+    aoi_geojson_path: str | None = None
+    aoi_geojson_file_id: str | None = None
+    aoi_points: list[list[float]] | None = None
+    aoi_crs: str | None = None
 class LocalUploadRequest(BaseModel):
     project_dir: str | None = None
     ortho_name: str | None = None
     dsm_name: str | None = None
     laz_name: str | None = None
+    aoi_name: str | None = None
+    clear_aoi: bool = False
 
 
 # ============================================
@@ -242,9 +279,9 @@ def load_yolo_models():
     return models
 
 
-def run_yolo_detection(classes_to_detect: list[str], progress_callback=None) -> list[dict]:
+def run_yolo_detection(classes_to_detect: list[str], progress_callback=None, aoi_geom=None) -> list[dict]:
     import rasterio
-    from rasterio.windows import Window
+    from rasterio.windows import Window, from_bounds
     import torch
     from torchvision.ops import nms
 
@@ -257,6 +294,21 @@ def run_yolo_detection(classes_to_detect: list[str], progress_callback=None) -> 
     height = ortho_cache["height"]
     pixel_w = ortho_cache["pixel_w"]
     pixel_h = ortho_cache["pixel_h"]
+    window_col = 0
+    window_row = 0
+
+    if aoi_geom is not None:
+        minx, miny, maxx, maxy = aoi_geom.bounds
+        try:
+            window = from_bounds(minx, miny, maxx, maxy, transform=transform)
+            window = window.round_offsets().round_lengths()
+            window = window.intersection(Window(0, 0, width, height))
+            window_col = int(window.col_off)
+            window_row = int(window.row_off)
+            width = int(window.width)
+            height = int(window.height)
+        except Exception as e:
+            raise ValueError(f"Failed to compute AOI window: {e}")
 
     models = load_yolo_models()
     if not models:
@@ -283,7 +335,7 @@ def run_yolo_detection(classes_to_detect: list[str], progress_callback=None) -> 
                 win_w = min(patch_size, width - x)
                 win_h = min(patch_size, height - y)
 
-                patch = src.read(window=Window(x, y, win_w, win_h))
+                patch = src.read(window=Window(window_col + x, window_row + y, win_w, win_h))
                 patch = np.moveaxis(patch[:3], 0, -1)
 
                 if patch.shape[0] < patch_size or patch.shape[1] < patch_size:
@@ -303,8 +355,8 @@ def run_yolo_detection(classes_to_detect: list[str], progress_callback=None) -> 
                         raw_detections.append({
                             "class": cls_name,
                             "conf": conf,
-                            "px1": x + bx[0], "py1": y + bx[1],
-                            "px2": x + bx[2], "py2": y + bx[3],
+                            "px1": window_col + x + bx[0], "py1": window_row + y + bx[1],
+                            "px2": window_col + x + bx[2], "py2": window_row + y + bx[3],
                         })
 
                 patch_count += 1
@@ -353,6 +405,14 @@ def run_yolo_detection(classes_to_detect: list[str], progress_callback=None) -> 
         cx = (r["px1"] + r["px2"]) / 2
         cy = (r["py1"] + r["py2"]) / 2
         gx, gy = transform * (cx, cy)
+
+        if aoi_geom is not None:
+            try:
+                from shapely.geometry import Point
+                if not aoi_geom.intersects(Point(gx, gy)):
+                    continue
+            except Exception:
+                pass
 
         records.append({
             "id": id_counter[cls_name],
@@ -1168,6 +1228,66 @@ async def upload_dsm(file: UploadFile = File(...)):
     raise HTTPException(status_code=400, detail="DSM must be a GeoTIFF file")
 
 
+@app.post("/api/upload/aoi")
+async def upload_aoi(file: UploadFile = File(...)):
+    filename = file.filename.lower()
+    file_path = UPLOAD_DIR / file.filename
+
+    if not filename.endswith(".geojson"):
+        raise HTTPException(status_code=400, detail="AOI must be a GeoJSON file")
+
+    with open(file_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    uploaded_files["aoi"] = str(file_path)
+    load_aoi_as_polygon(str(file_path), uploaded_files.get("ortho"))
+
+    minx, miny, maxx, maxy = aoi_cache.get("bbox") or (None, None, None, None)
+    wgs84_minx, wgs84_miny, wgs84_maxx, wgs84_maxy = aoi_cache.get("bbox_wgs84") or (None, None, None, None)
+    return {
+        "filename": file.filename,
+        "message": "AOI uploaded",
+        "type": "aoi",
+        "aoi_bbox": [minx, miny, maxx, maxy],
+        "aoi_bbox_wgs84": [wgs84_minx, wgs84_miny, wgs84_maxx, wgs84_maxy],
+        "aoi_geojson": aoi_cache.get("geojson"),
+        "aoi_mode": aoi_cache.get("mode"),
+        "aoi_input_geom_type": aoi_cache.get("input_geom_type"),
+        "aoi_used_geom_type": aoi_cache.get("used_geom_type"),
+        "aoi_buffer_m": aoi_cache.get("buffer_m"),
+        "image_crs": aoi_cache.get("image_crs"),
+        "aoi_crs": aoi_cache.get("crs"),
+        "aoi_assumed_crs": aoi_cache.get("assumed_crs"),
+    }
+
+
+@app.get("/api/aoi")
+async def get_aoi_info():
+    if not aoi_cache.get("loaded"):
+        return {"loaded": False}
+    minx, miny, maxx, maxy = aoi_cache.get("bbox") or (None, None, None, None)
+    wgs84_minx, wgs84_miny, wgs84_maxx, wgs84_maxy = aoi_cache.get("bbox_wgs84") or (None, None, None, None)
+    return {
+        "loaded": True,
+        "aoi_bbox": [minx, miny, maxx, maxy],
+        "aoi_bbox_wgs84": [wgs84_minx, wgs84_miny, wgs84_maxx, wgs84_maxy],
+        "aoi_geojson": aoi_cache.get("geojson"),
+        "aoi_mode": aoi_cache.get("mode"),
+        "aoi_input_geom_type": aoi_cache.get("input_geom_type"),
+        "aoi_used_geom_type": aoi_cache.get("used_geom_type"),
+        "aoi_buffer_m": aoi_cache.get("buffer_m"),
+        "image_crs": aoi_cache.get("image_crs"),
+        "aoi_crs": aoi_cache.get("crs"),
+        "aoi_assumed_crs": aoi_cache.get("assumed_crs"),
+    }
+
+
+@app.post("/api/aoi/clear")
+async def clear_aoi():
+    _clear_aoi_cache()
+    return {"status": "ok"}
+
+
 
 def _validate_local_path(path_str: str, exts: set[str], label: str) -> str:
     path = Path(path_str)
@@ -1177,6 +1297,202 @@ def _validate_local_path(path_str: str, exts: set[str], label: str) -> str:
         allowed = ", ".join(sorted(exts))
         raise HTTPException(status_code=400, detail=f"{label} must be one of: {allowed}")
     return str(path)
+
+
+def _clear_aoi_cache():
+    aoi_cache.update({
+        "geom": None,
+        "bbox": None,
+        "bbox_wgs84": None,
+        "geojson": None,
+        "crs": None,
+        "image_crs": None,
+        "input_geom_type": None,
+        "used_geom_type": None,
+        "buffer_m": None,
+        "assumed_crs": False,
+        "mode": None,
+        "loaded": False,
+        "path": None,
+    })
+    uploaded_files["aoi"] = None
+
+
+def load_aoi_as_polygon(
+    aoi_geojson_path: str,
+    image_path: str,
+    point_buffer_m: float = 50,
+    assume_wgs84_if_missing: bool = False,
+) -> dict:
+    if not aoi_geojson_path:
+        raise HTTPException(status_code=400, detail="AOI path is required")
+    if not image_path:
+        raise HTTPException(status_code=400, detail="Image path is required for AOI alignment")
+
+    try:
+        import geopandas as gpd
+        from shapely.geometry import MultiPoint, box, mapping
+        from shapely.validation import explain_validity
+        import rasterio
+        from pyproj import CRS
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"Missing AOI dependency: {e}")
+
+    try:
+        gdf = gpd.read_file(aoi_geojson_path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read AOI GeoJSON: {e}")
+
+    if gdf.empty or gdf.geometry.isnull().all():
+        raise HTTPException(status_code=400, detail="AOI GeoJSON is empty")
+
+    assumed_crs = False
+    if gdf.crs is None:
+        if not assume_wgs84_if_missing:
+            raise HTTPException(status_code=400, detail="AOI CRS missing; please provide CRS")
+        gdf = gdf.set_crs("EPSG:4326")
+        assumed_crs = True
+
+    try:
+        with rasterio.open(image_path) as src:
+            image_crs = src.crs
+            image_bounds = src.bounds
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to open image for AOI alignment: {e}")
+
+    if image_crs is None:
+        raise HTTPException(status_code=400, detail="Image CRS missing; cannot align AOI")
+
+    aoi_crs = gdf.crs
+    try:
+        gdf_img = gdf.to_crs(image_crs)
+    except Exception:
+        raise HTTPException(status_code=400, detail="AOI CRS not recognized; please provide a valid CRS")
+
+    geom_union = gdf_img.unary_union
+    if geom_union is None or geom_union.is_empty:
+        raise HTTPException(status_code=400, detail="AOI geometry is empty")
+
+    input_geom_type = geom_union.geom_type
+    used_geom = geom_union
+    used_geom_type = input_geom_type
+    buffer_used = None
+
+    mode = "geojson"
+    if input_geom_type in {"Point", "MultiPoint"}:
+        points = [geom_union] if input_geom_type == "Point" else list(geom_union.geoms)
+        if len(points) != 4:
+            raise HTTPException(status_code=400, detail="AOI points GeoJSON must contain exactly 4 points")
+        used_geom = MultiPoint(points).minimum_rotated_rectangle
+        if used_geom.is_empty:
+            raise HTTPException(status_code=400, detail="AOI polygon is empty")
+        if not used_geom.is_valid:
+            raise HTTPException(status_code=400, detail=f"Invalid AOI polygon: {explain_validity(used_geom)}")
+        used_geom_type = used_geom.geom_type
+        buffer_used = None
+        mode = "geojson_points_rect"
+
+    if used_geom_type not in {"Polygon", "MultiPolygon"}:
+        raise HTTPException(status_code=400, detail=f"AOI geometry must be Polygon or MultiPolygon (got {used_geom_type})")
+
+    image_bounds_geom = box(image_bounds.left, image_bounds.bottom, image_bounds.right, image_bounds.top)
+    if not used_geom.intersects(image_bounds_geom):
+        raise HTTPException(status_code=400, detail="AOI does not intersect image bounds; check CRS/coordinates")
+
+    try:
+        geom_wgs84 = gpd.GeoSeries([used_geom], crs=image_crs).to_crs("EPSG:4326").iloc[0]
+    except Exception:
+        raise HTTPException(status_code=400, detail="Failed to project AOI to EPSG:4326")
+
+    info = {
+        "geom": used_geom,
+        "bbox": used_geom.bounds,
+        "bbox_wgs84": geom_wgs84.bounds,
+        "geojson": {"type": "Feature", "properties": {}, "geometry": mapping(geom_wgs84)},
+        "crs": str(aoi_crs) if aoi_crs else "EPSG:4326",
+        "image_crs": str(image_crs),
+        "input_geom_type": input_geom_type,
+        "used_geom_type": used_geom_type,
+        "buffer_m": buffer_used,
+        "assumed_crs": assumed_crs,
+    }
+
+    aoi_cache.update({
+        **info,
+        "mode": mode,
+        "loaded": True,
+        "path": str(aoi_geojson_path),
+    })
+    return info
+
+
+def build_aoi_from_points(
+    points: list[list[float]],
+    aoi_crs: str | None,
+    image_crs,
+    image_bounds,
+) -> dict:
+    if not points:
+        raise HTTPException(status_code=400, detail="AOI points are required")
+    if len(points) not in (4, 5):
+        raise HTTPException(status_code=400, detail="AOI points must have 4 points (or 5 with closure)")
+
+    for idx, pt in enumerate(points):
+        if not isinstance(pt, (list, tuple)) or len(pt) != 2:
+            raise HTTPException(status_code=400, detail=f"AOI point {idx + 1} must be [x, y]")
+
+    if aoi_crs is None:
+        raise HTTPException(status_code=400, detail="AOI CRS is required for aoi_points")
+
+    if len(points) == 5 and points[0] != points[-1]:
+        raise HTTPException(status_code=400, detail="AOI points closure is invalid (last point must equal first)")
+
+    closed_points = points if len(points) == 5 else points + [points[0]]
+
+    try:
+        import geopandas as gpd
+        from shapely.geometry import Polygon, box, mapping
+        from shapely.validation import explain_validity
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"Missing AOI dependency: {e}")
+
+    poly = Polygon(closed_points)
+    if poly.is_empty:
+        raise HTTPException(status_code=400, detail="AOI polygon is empty")
+    if not poly.is_valid:
+        raise HTTPException(status_code=400, detail=f"Invalid AOI polygon: {explain_validity(poly)}")
+
+    try:
+        poly_series = gpd.GeoSeries([poly], crs=aoi_crs)
+    except Exception:
+        raise HTTPException(status_code=400, detail="AOI CRS not recognized; please provide a valid CRS")
+
+    try:
+        poly_img = poly_series.to_crs(image_crs).iloc[0]
+    except Exception:
+        raise HTTPException(status_code=400, detail="Failed to project AOI to image CRS")
+
+    image_bounds_geom = box(image_bounds.left, image_bounds.bottom, image_bounds.right, image_bounds.top)
+    if not poly_img.intersects(image_bounds_geom):
+        raise HTTPException(status_code=400, detail="AOI does not intersect image bounds; check CRS/coordinates")
+
+    try:
+        geom_wgs84 = gpd.GeoSeries([poly_img], crs=image_crs).to_crs("EPSG:4326").iloc[0]
+    except Exception:
+        raise HTTPException(status_code=400, detail="Failed to project AOI to EPSG:4326")
+
+    return {
+        "geom": poly_img,
+        "bbox": poly_img.bounds,
+        "bbox_wgs84": geom_wgs84.bounds,
+        "geojson": {"type": "Feature", "properties": {}, "geometry": mapping(geom_wgs84)},
+        "crs": str(aoi_crs),
+        "image_crs": str(image_crs),
+        "input_geom_type": "PointList",
+        "used_geom_type": poly_img.geom_type,
+        "buffer_m": None,
+        "assumed_crs": False,
+    }
 
 @app.post("/api/upload/local")
 async def upload_local_paths(payload: LocalUploadRequest):
@@ -1200,6 +1516,7 @@ async def upload_local_paths(payload: LocalUploadRequest):
     ortho_path = build_path(payload.ortho_name)
     dsm_path = build_path(payload.dsm_name)
     laz_path = build_path(payload.laz_name)
+    aoi_path = build_path(payload.aoi_name)
 
     if ortho_path:
         cleanup_all()
@@ -1220,6 +1537,16 @@ async def upload_local_paths(payload: LocalUploadRequest):
         load_point_cloud(laz_path)
         loaded["laz"] = laz_path
 
+    if payload.clear_aoi and not aoi_path:
+        _clear_aoi_cache()
+        loaded["aoi"] = ""
+
+    if aoi_path:
+        aoi_path = _validate_local_path(aoi_path, {".geojson"}, "AOI")
+        uploaded_files["aoi"] = aoi_path
+        load_aoi_as_polygon(aoi_path, uploaded_files.get("ortho"))
+        loaded["aoi"] = aoi_path
+
     if not loaded:
         raise HTTPException(status_code=400, detail="No valid files to load")
 
@@ -1232,6 +1559,44 @@ async def start_processing(request: ProcessingRequest = None):
 
     if ortho_cache["src"] is None:
         raise HTTPException(status_code=400, detail="Please upload an image first")
+
+    aoi_geom = None
+    if request.aoi_points is not None:
+        src = ortho_cache["src"]
+        if src.crs is None:
+            raise HTTPException(status_code=400, detail="Image CRS missing; cannot align AOI")
+        aoi_info = build_aoi_from_points(
+            request.aoi_points,
+            request.aoi_crs,
+            src.crs,
+            src.bounds,
+        )
+        aoi_cache.update({
+            **aoi_info,
+            "mode": "points",
+            "loaded": True,
+            "path": None,
+        })
+        aoi_geom = aoi_cache.get("geom")
+    elif request.aoi_geojson_path:
+        load_aoi_as_polygon(request.aoi_geojson_path, uploaded_files.get("ortho"))
+        aoi_geom = aoi_cache.get("geom")
+    elif request.aoi_geojson_file_id:
+        if not uploaded_files.get("aoi"):
+            raise HTTPException(status_code=400, detail="AOI file not uploaded")
+        load_aoi_as_polygon(uploaded_files["aoi"], uploaded_files.get("ortho"))
+        aoi_geom = aoi_cache.get("geom")
+    elif aoi_cache.get("loaded"):
+        aoi_geom = aoi_cache.get("geom")
+
+    if aoi_geom is not None:
+        try:
+            src_bounds = ortho_cache["src"].bounds
+            img_area = max((src_bounds.right - src_bounds.left) * (src_bounds.top - src_bounds.bottom), 0)
+            if img_area > 0 and (aoi_geom.area / img_area) > 0.8:
+                print("[AOI] AOI covers most of the image; inference may be slower")
+        except Exception:
+            pass
 
     job_id = f"job_{int(time.time())}"
     processing_state["job_id"] = job_id
@@ -1255,7 +1620,7 @@ async def start_processing(request: ProcessingRequest = None):
 
             # YOLO detection (0-70%)
             update_progress(10, "Loading models...")
-            detections = run_yolo_detection(classes, update_progress)
+            detections = run_yolo_detection(classes, update_progress, aoi_geom=aoi_geom)
 
             # Height analysis (70-80%)
             if request.include_elevation:
@@ -1292,7 +1657,21 @@ async def start_processing(request: ProcessingRequest = None):
             traceback.print_exc()
 
     threading.Thread(target=run, daemon=True).start()
-    return {"job_id": job_id, "status": "started", "message": "Processing started"}
+    return {
+        "job_id": job_id,
+        "status": "started",
+        "message": "Processing started",
+        "aoi_bbox": list(aoi_cache.get("bbox") or (None, None, None, None)),
+        "aoi_bbox_wgs84": list(aoi_cache.get("bbox_wgs84") or (None, None, None, None)),
+        "aoi_geojson": aoi_cache.get("geojson"),
+        "aoi_mode": aoi_cache.get("mode"),
+        "aoi_input_geom_type": aoi_cache.get("input_geom_type"),
+        "aoi_used_geom_type": aoi_cache.get("used_geom_type"),
+        "aoi_buffer_m": aoi_cache.get("buffer_m"),
+        "image_crs": aoi_cache.get("image_crs"),
+        "aoi_crs": aoi_cache.get("crs"),
+        "aoi_assumed_crs": aoi_cache.get("assumed_crs"),
+    }
 
 
 @app.get("/api/process/status")

@@ -4,6 +4,7 @@ import type {
   Project,
   GpuStatus,
   OrthoBounds,
+  AoiInfo,
   TiffMetadata,
   LandcoverStats,
   LandcoverStatus,
@@ -79,6 +80,10 @@ export const processingKeys = {
 export const orthoKeys = {
   bounds: ['ortho', 'bounds'] as const,
   metadata: ['ortho', 'metadata'] as const,
+}
+
+export const aoiKeys = {
+  info: ['aoi', 'info'] as const,
 }
 
 export const landcoverKeys = {
@@ -189,6 +194,47 @@ export function getOrthoImageUrl(cacheBust?: number): string | null {
   if (!baseUrl) return null
   const bust = cacheBust ? `?t=${cacheBust}` : ''
   return `${baseUrl}/api/ortho/image${bust}`
+}
+
+async function fetchAoiInfo(): Promise<AoiInfo | null> {
+  if (useMock()) {
+    return null
+  }
+
+  try {
+    const result = await apiRequest<{
+      loaded?: boolean
+      aoi_bbox?: [number, number, number, number]
+      aoi_bbox_wgs84?: [number, number, number, number]
+      aoi_geojson?: Record<string, unknown>
+      aoi_input_geom_type?: string | null
+      aoi_used_geom_type?: string | null
+      aoi_buffer_m?: number | null
+      image_crs?: string | null
+      aoi_crs?: string | null
+      aoi_assumed_crs?: boolean
+    }>('/api/aoi')
+    if (!result.loaded || !result.aoi_bbox || !result.aoi_geojson) {
+      return null
+    }
+    const [minx, miny, maxx, maxy] = result.aoi_bbox
+    const bbox_wgs84 = result.aoi_bbox_wgs84
+      ? { minx: result.aoi_bbox_wgs84[0], miny: result.aoi_bbox_wgs84[1], maxx: result.aoi_bbox_wgs84[2], maxy: result.aoi_bbox_wgs84[3] }
+      : undefined
+    return {
+      bbox: { minx, miny, maxx, maxy },
+      bbox_wgs84,
+      geojson: result.aoi_geojson,
+      input_geom_type: result.aoi_input_geom_type ?? undefined,
+      used_geom_type: result.aoi_used_geom_type ?? undefined,
+      buffer_m: result.aoi_buffer_m ?? undefined,
+      image_crs: result.image_crs ?? undefined,
+      aoi_crs: result.aoi_crs ?? undefined,
+      assumed_crs: result.aoi_assumed_crs ?? undefined,
+    }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -358,6 +404,10 @@ export interface ProcessingRequest {
   output_stats: boolean
   output_pdf: boolean
   output_geojson: boolean
+  aoi_geojson_path?: string | null
+  aoi_geojson_file_id?: string | null
+  aoi_points?: number[][] | null
+  aoi_crs?: string | null
 }
 
 /**
@@ -385,7 +435,7 @@ export interface ProcessingStatusResponse {
  */
 export interface UploadFileParams {
   file: File
-  fileType: 'ortho' | 'dsm' | 'laz'
+  fileType: 'ortho' | 'dsm' | 'laz' | 'aoi'
 }
 
 export interface LocalUploadParams {
@@ -393,6 +443,8 @@ export interface LocalUploadParams {
   ortho_name?: string
   dsm_name?: string
   laz_name?: string
+  aoi_name?: string
+  clear_aoi?: boolean
 }
 
 /**
@@ -413,7 +465,11 @@ async function uploadFile(
 
   const baseUrl = getApiBaseUrl()
   // DSM 使用專屬端點，其他使用通用端點
-  const endpoint = fileType === 'dsm' ? '/api/upload/dsm' : '/api/upload'
+  const endpoint = fileType === 'dsm'
+    ? '/api/upload/dsm'
+    : fileType === 'aoi'
+      ? '/api/upload/aoi'
+      : '/api/upload'
   const response = await fetch(`${baseUrl}${endpoint}`, {
     method: 'POST',
     body: formData,
@@ -439,6 +495,8 @@ async function uploadLocalPaths(
     if (params.ortho_name) loaded.ortho = params.ortho_name
     if (params.dsm_name) loaded.dsm = params.dsm_name
     if (params.laz_name) loaded.laz = params.laz_name
+    if (params.aoi_name) loaded.aoi = params.aoi_name
+    if (params.clear_aoi && !params.aoi_name) loaded.aoi = ''
     return { status: 'ok', loaded }
   }
 
@@ -538,6 +596,14 @@ export function useOrthoBounds() {
   })
 }
 
+export function useAoiInfo() {
+  return useQuery({
+    queryKey: aoiKeys.info,
+    queryFn: fetchAoiInfo,
+    enabled: !useMock(),
+  })
+}
+
 /**
  * 取得 TIFF 元資料 Hook
  */
@@ -557,7 +623,13 @@ export function useUploadFile() {
   return useMutation({
     mutationFn: uploadFile,
     onSuccess: (data) => {
-      const typeLabel = data.type === 'laz' ? 'LAZ' : data.type === 'dsm' ? 'DSM' : 'Image'
+      const typeLabel = data.type === 'laz'
+        ? 'LAZ'
+        : data.type === 'dsm'
+          ? 'DSM'
+          : data.type === 'aoi'
+            ? 'AOI'
+            : 'Image'
       notify.success(`${typeLabel} uploaded`, data.filename)
 
       // 上傳新的 ortho 時，清除所有快取（包含舊的偵測結果）
@@ -566,6 +638,9 @@ export function useUploadFile() {
       } else {
         queryClient.invalidateQueries({ queryKey: projectKeys.all })
         queryClient.invalidateQueries({ queryKey: orthoKeys.bounds })
+        if (data.type === 'aoi') {
+          queryClient.invalidateQueries({ queryKey: aoiKeys.info })
+        }
       }
     },
     onError: (error) => {
@@ -589,10 +664,31 @@ export function useUploadLocalPaths() {
       } else {
         queryClient.invalidateQueries({ queryKey: projectKeys.all })
         queryClient.invalidateQueries({ queryKey: orthoKeys.bounds })
+        if (data.loaded?.aoi !== undefined) {
+          queryClient.invalidateQueries({ queryKey: aoiKeys.info })
+        }
       }
     },
     onError: (error) => {
       notify.error('Apply failed', error instanceof Error ? error.message : 'Unknown error')
+    },
+  })
+}
+
+export function useClearAoi() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async () => {
+      if (useMock()) return { status: 'ok' }
+      return apiRequest<{ status: string }>('/api/aoi/clear', { method: 'POST' })
+    },
+    onSuccess: () => {
+      notify.success('AOI cleared')
+      queryClient.invalidateQueries({ queryKey: aoiKeys.info })
+    },
+    onError: (error) => {
+      notify.error('Clear AOI failed', error instanceof Error ? error.message : 'Unknown error')
     },
   })
 }

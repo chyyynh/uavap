@@ -11,6 +11,7 @@ import {
   Popup,
   ImageOverlay,
   useMap,
+  GeoJSON,
 } from 'react-leaflet'
 import type { CircleMarker as LeafletCircleMarker, Map as LeafletMap } from 'leaflet'
 
@@ -18,7 +19,7 @@ import { cn } from '@/lib/utils'
 import { Chip } from '@/components/ui/chip'
 import { LayerPanel } from './LayerPanel'
 import { HoverCard } from './HoverCard'
-import type { DetectionObject, LayerVisibility, ObjectClass, OrthoBounds } from '@/types/detection'
+import type { DetectionObject, LayerVisibility, ObjectClass, OrthoBounds, AoiInfo } from '@/types/detection'
 import {
   DEFAULT_MAP_CENTER,
   DEFAULT_MAP_ZOOM,
@@ -34,6 +35,7 @@ interface MapViewProps {
   onSelectObject: (id: number) => void
   mapRef?: React.MutableRefObject<LeafletMap | null>
   orthoBounds?: OrthoBounds | null
+  aoiInfo?: AoiInfo | null
   orthoUrl?: string | null
   landcoverUrl?: string | null
   slopeUrl?: string | null
@@ -61,6 +63,7 @@ function MapView({
   onSelectObject,
   mapRef,
   orthoBounds,
+  aoiInfo,
   orthoUrl,
   landcoverUrl,
   slopeUrl,
@@ -108,7 +111,7 @@ function MapView({
         zoomControl={false}
         ref={mapRef as any}
       >
-        <MapController mapRef={mapRef} objects={objects} orthoBounds={orthoBounds} />
+        <MapController mapRef={mapRef} objects={objects} orthoBounds={orthoBounds} aoiInfo={aoiInfo} />
 
         {layerVisibility.base && (
           <TileLayer
@@ -128,6 +131,17 @@ function MapView({
               [orthoBounds.north, orthoBounds.east],
             ]}
             opacity={0.9}
+          />
+        )}
+
+        {aoiInfo?.geojson && (
+          <GeoJSON
+            data={aoiInfo.geojson as any}
+            style={{
+              color: '#0ea5e9',
+              weight: 2,
+              fillOpacity: 0.15,
+            }}
           />
         )}
 
@@ -247,9 +261,10 @@ interface MapControllerProps {
   mapRef?: React.MutableRefObject<LeafletMap | null>
   objects?: DetectionObject[]
   orthoBounds?: OrthoBounds | null
+  aoiInfo?: AoiInfo | null
 }
 
-function MapController({ mapRef, objects, orthoBounds }: MapControllerProps) {
+function MapController({ mapRef, objects, orthoBounds, aoiInfo }: MapControllerProps) {
   const map = useMap()
   const lastFitRef = React.useRef<string | null>(null)
 
@@ -261,6 +276,30 @@ function MapController({ mapRef, objects, orthoBounds }: MapControllerProps) {
 
   // ???????????????????
   React.useEffect(() => {
+    const aoiBounds = aoiInfo?.bbox_wgs84
+    const hasAoiBounds = !!(
+      aoiBounds &&
+      aoiBounds.minx !== undefined &&
+      aoiBounds.miny !== undefined &&
+      aoiBounds.maxx !== undefined &&
+      aoiBounds.maxy !== undefined
+    )
+    const aoiKey = hasAoiBounds
+      ? `aoi:${aoiBounds!.miny},${aoiBounds!.minx},${aoiBounds!.maxy},${aoiBounds!.maxx}`
+      : null
+
+    if (hasAoiBounds && aoiKey && lastFitRef.current !== aoiKey) {
+      map.fitBounds(
+        [
+          [aoiBounds!.miny, aoiBounds!.minx],
+          [aoiBounds!.maxy, aoiBounds!.maxx],
+        ],
+        { padding: [50, 50] }
+      )
+      lastFitRef.current = aoiKey
+      return
+    }
+
     const hasOrthoBounds = !!(
       orthoBounds &&
       orthoBounds.north !== undefined &&
@@ -268,11 +307,11 @@ function MapController({ mapRef, objects, orthoBounds }: MapControllerProps) {
       orthoBounds.east !== undefined &&
       orthoBounds.west !== undefined
     )
-    const boundsKey = hasOrthoBounds
-      ? `${orthoBounds?.south},${orthoBounds?.west},${orthoBounds?.north},${orthoBounds?.east}`
+    const orthoKey = hasOrthoBounds
+      ? `ortho:${orthoBounds?.south},${orthoBounds?.west},${orthoBounds?.north},${orthoBounds?.east}`
       : null
 
-    if (hasOrthoBounds && boundsKey && lastFitRef.current !== boundsKey) {
+    if (hasOrthoBounds && orthoKey && lastFitRef.current !== orthoKey) {
       map.fitBounds(
         [
           [orthoBounds!.south, orthoBounds!.west],
@@ -280,7 +319,7 @@ function MapController({ mapRef, objects, orthoBounds }: MapControllerProps) {
         ],
         { padding: [50, 50] }
       )
-      lastFitRef.current = boundsKey
+      lastFitRef.current = orthoKey
       return
     }
 
@@ -294,7 +333,7 @@ function MapController({ mapRef, objects, orthoBounds }: MapControllerProps) {
       map.fitBounds(bounds, { padding: [50, 50] })
       lastFitRef.current = 'objects'
     }
-  }, [map, objects, orthoBounds])
+  }, [map, objects, orthoBounds, aoiInfo])
 
   return null
 }

@@ -20,12 +20,14 @@ export interface UploadedFiles {
   ortho: { name: string; uploaded: boolean } | null
   dsm: { name: string; uploaded: boolean } | null
   laz: { name: string; uploaded: boolean } | null
+  aoi: { name: string; uploaded: boolean } | null
 }
 
 export interface RequiredFiles {
   ortho: boolean
   dsm: boolean
   laz: boolean
+  aoi: boolean
 }
 
 interface TaskOptionsContextValue {
@@ -39,6 +41,10 @@ interface TaskOptionsContextValue {
   bumpCacheBust: () => void
   uploadedFiles: UploadedFiles
   setUploadedFile: (key: keyof UploadedFiles, file: { name: string; uploaded: boolean } | null) => void
+  aoiPoints: number[][] | null
+  setAoiPoints: (points: number[][] | null) => void
+  aoiCrs: string | null
+  setAoiCrs: (crs: string | null) => void
   requiredFiles: RequiredFiles
   canProcess: boolean
 }
@@ -61,6 +67,7 @@ const DEFAULT_UPLOADED_FILES: UploadedFiles = {
   ortho: null,
   dsm: null,
   laz: null,
+  aoi: null,
 }
 
 export function TaskOptionsProvider({ children }: { children: React.ReactNode }) {
@@ -68,6 +75,8 @@ export function TaskOptionsProvider({ children }: { children: React.ReactNode })
   const [fileMode, setFileMode] = React.useState<FileInputMode>('upload')
   const [cacheBust, setCacheBust] = React.useState(0)
   const [uploadedFiles, setUploadedFiles] = React.useState<UploadedFiles>(DEFAULT_UPLOADED_FILES)
+  const [aoiPoints, setAoiPoints] = React.useState<number[][] | null>(null)
+  const [aoiCrs, setAoiCrs] = React.useState<string | null>('EPSG:4326')
 
   const setOption = React.useCallback((key: keyof TaskOptions, value: boolean) => {
     setOptions((prev) => {
@@ -109,6 +118,7 @@ export function TaskOptionsProvider({ children }: { children: React.ReactNode })
       ortho: true, // Always required for object detection
       dsm: options.geoEnabled || options.changeEnabled, // DSM for elevation or terrain analysis
       laz: options.geoEnabled, // Point cloud for height calculation
+      aoi: false,
     }
   }, [options.geoEnabled, options.changeEnabled])
 
@@ -132,10 +142,14 @@ export function TaskOptionsProvider({ children }: { children: React.ReactNode })
       bumpCacheBust: () => setCacheBust((v) => v + 1),
       uploadedFiles,
       setUploadedFile,
+      aoiPoints,
+      setAoiPoints,
+      aoiCrs,
+      setAoiCrs,
       requiredFiles,
       canProcess,
     }),
-    [options, setOption, outputText, fieldText, fileMode, cacheBust, uploadedFiles, setUploadedFile, requiredFiles, canProcess]
+    [options, setOption, outputText, fieldText, fileMode, cacheBust, uploadedFiles, setUploadedFile, aoiPoints, aoiCrs, requiredFiles, canProcess]
   )
 
   return (

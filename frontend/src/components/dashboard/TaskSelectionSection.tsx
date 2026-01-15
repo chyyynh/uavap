@@ -23,9 +23,10 @@ import {
 } from '@/components/ui/tooltip'
 import {
   useTaskOptionsContext,
+  type RequiredFiles,
   type UploadedFiles,
 } from '@/contexts/TaskOptionsContext'
-import { useUploadFile, useUploadLocalPaths } from '@/api/queries'
+import { useClearAoi, useUploadFile, useUploadLocalPaths } from '@/api/queries'
 import { Input } from '@/components/ui/input'
 
 const DETECTION_TARGETS = [
@@ -53,6 +54,7 @@ const FILE_UPLOAD_ITEMS: Array<{
   accept: string
   icon: typeof Image02Icon
   helpText: string
+  optional?: boolean
 }> = [
   {
     key: 'ortho',
@@ -75,34 +77,53 @@ const FILE_UPLOAD_ITEMS: Array<{
     icon: GridIcon,
     helpText: '(.laz)',
   },
+  {
+    key: 'aoi',
+    label: 'AOI (.geojson)',
+    accept: '.geojson',
+    icon: GridIcon,
+    helpText: '(.geojson)',
+    optional: true,
+  },
 ]
+
+const DEFAULT_LOCAL_NAMES = {
+  ortho: 'odm_orthophoto/odm_orthophoto.tif',
+  dsm: 'odm_dem/dsm.tif',
+  laz: 'odm_georeferncing/odm_georeferenced_model.laz',
+  aoi: 'PJ_1768201091_AOI_points_EPSG32651.geojson',
+}
+
+function withDefaults(value: string, fallback: string) {
+  return value && value.trim() ? value : fallback
+}
+
 function TaskSelectionSection() {
   const { options, setOption, fileMode, setFileMode, bumpCacheBust, uploadedFiles, setUploadedFile, requiredFiles } =
     useTaskOptionsContext()
   const uploadMutation = useUploadFile()
   const uploadLocalMutation = useUploadLocalPaths()
+  const clearAoiMutation = useClearAoi()
   const fileInputRefs = React.useRef<Record<string, HTMLInputElement | null>>(
     {},
   )
   const [localProjectDir, setLocalProjectDir] = React.useState('C:\\Users\\chonrou hsu\\Pictures\\20250410_hole\\20260105\\uavap\\UAVAP_DATA\\project_001')
-  const [localNames, setLocalNames] = React.useState({
-    ortho: 'odm_orthophoto.tif',
-    dsm: 'dsm.tif',
-    laz: 'odm_georeferenced_model.laz',
-  })
+  const [localNames, setLocalNames] = React.useState(DEFAULT_LOCAL_NAMES)
 
   const switchMode = React.useCallback(
     (mode: 'upload' | 'local') => {
       setFileMode(mode)
       if (mode === 'local') {
-        setLocalNames({
-          ortho: 'odm_orthophoto.tif',
-          dsm: 'dsm.tif',
-          laz: 'odm_georeferenced_model.laz',
-        })
+        setLocalNames((prev) => ({
+          ortho: withDefaults(prev.ortho, DEFAULT_LOCAL_NAMES.ortho),
+          dsm: withDefaults(prev.dsm, DEFAULT_LOCAL_NAMES.dsm),
+          laz: withDefaults(prev.laz, DEFAULT_LOCAL_NAMES.laz),
+          aoi: withDefaults(prev.aoi, DEFAULT_LOCAL_NAMES.aoi),
+        }))
         setUploadedFile('ortho', null)
         setUploadedFile('dsm', null)
         setUploadedFile('laz', null)
+        setUploadedFile('aoi', null)
       }
     },
     [setFileMode, setUploadedFile],
@@ -147,18 +168,36 @@ function TaskSelectionSection() {
 
   const handleApplyLocal = React.useCallback(async () => {
     if (!localRequirementsMet) return
+    const shouldClearAoi = !localNames.aoi.trim() && !!uploadedFiles.aoi?.uploaded
     const payload = {
       project_dir: localProjectDir.trim(),
       ortho_name: requiredFiles.ortho ? (localNames.ortho.trim() || undefined) : undefined,
       dsm_name: requiredFiles.dsm ? (localNames.dsm.trim() || undefined) : undefined,
       laz_name: requiredFiles.laz ? (localNames.laz.trim() || undefined) : undefined,
+      aoi_name: localNames.aoi.trim() || undefined,
+      clear_aoi: shouldClearAoi,
     }
     await uploadLocalMutation.mutateAsync(payload)
     if (payload.ortho_name) setUploadedFile('ortho', { name: `${payload.project_dir}\\${payload.ortho_name}`, uploaded: true })
     if (payload.dsm_name) setUploadedFile('dsm', { name: `${payload.project_dir}\\${payload.dsm_name}`, uploaded: true })
     if (payload.laz_name) setUploadedFile('laz', { name: `${payload.project_dir}\\${payload.laz_name}`, uploaded: true })
+    if (payload.aoi_name) {
+      setUploadedFile('aoi', { name: `${payload.project_dir}\\${payload.aoi_name}`, uploaded: true })
+    } else if (payload.clear_aoi) {
+      setUploadedFile('aoi', null)
+    }
     bumpCacheBust()
-  }, [bumpCacheBust, localNames, localProjectDir, localRequirementsMet, requiredFiles, setUploadedFile, uploadLocalMutation])
+  }, [bumpCacheBust, localNames, localProjectDir, localRequirementsMet, requiredFiles, setUploadedFile, uploadLocalMutation, uploadedFiles.aoi?.uploaded])
+
+  const handleClearAoi = React.useCallback(async () => {
+    try {
+      await clearAoiMutation.mutateAsync()
+      setUploadedFile('aoi', null)
+      setLocalNames((prev) => ({ ...prev, aoi: '' }))
+    } catch {
+      // handled by mutation
+    }
+  }, [clearAoiMutation, setUploadedFile])
 
   const handleInputChange = React.useCallback(
     (key: keyof UploadedFiles) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -299,11 +338,11 @@ function TaskSelectionSection() {
           </span>
           <div className="space-y-2">
             {FILE_UPLOAD_ITEMS.map((item) => {
-              const isRequired = requiredFiles[item.key]
+              const isRequired = requiredFiles[item.key as keyof RequiredFiles] ?? false
               const fileInfo = uploadedFiles[item.key]
               const isUploaded = fileInfo?.uploaded
 
-              if (!isRequired) return null
+              if (!isRequired && !item.optional) return null
 
               return (
                 <div
@@ -386,6 +425,20 @@ function TaskSelectionSection() {
                       className="size-3.5"
                     />
                   </button>
+                  {item.key === 'aoi' && isUploaded && (
+                    <button
+                      type="button"
+                      onClick={handleClearAoi}
+                      disabled={clearAoiMutation.isPending}
+                      className={cn(
+                        'ml-2 rounded-(--uav-radius-xs) border px-2 py-1 text-[10px] uppercase tracking-wide',
+                        'border-(--uav-stroke) text-(--uav-text-tertiary) hover:text-(--uav-text)',
+                        clearAoiMutation.isPending && 'opacity-50 cursor-not-allowed',
+                      )}
+                    >
+                      Clear
+                    </button>
+                  )}
                     </>
                   )}
                 </div>

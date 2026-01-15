@@ -78,6 +78,7 @@ project_xxx/
   odm_orthophoto.tif
   dsm.tif
   odm_georeferenced_model.laz
+  aoi.geojson
 ```
 
 ### Apply on Backend (Required)
@@ -89,7 +90,8 @@ curl -X POST http://127.0.0.1:8000/api/upload/local   -H "Content-Type: applicat
     "project_dir": "C:\Users\...\UAVAP_DATA\project_002",
     "ortho_name": "odm_orthophoto.tif",
     "dsm_name": "dsm.tif",
-    "laz_name": "odm_georeferenced_model.laz"
+    "laz_name": "odm_georeferenced_model.laz",
+    "aoi_name": "aoi.geojson"
   }'
 ```
 
@@ -114,7 +116,10 @@ curl -X POST http://127.0.0.1:8000/api/upload/local   -H "Content-Type: applicat
 | --- | --- | --- |
 | `/api/upload` | POST | Upload orthophoto/LAZ |
 | `/api/upload/dsm` | POST | Upload DSM |
+| `/api/upload/aoi` | POST | Upload AOI GeoJSON |
 | `/api/upload/local` | POST | Apply local file paths |
+| `/api/aoi` | GET | Get AOI metadata |
+| `/api/aoi/clear` | POST | Clear AOI |
 
 ### Orthophoto
 
@@ -132,6 +137,12 @@ curl -X POST http://127.0.0.1:8000/api/upload/local   -H "Content-Type: applicat
 | `/api/process` | POST | Start processing |
 | `/api/process/{job_id}/status` | GET | Processing status |
 | `/api/detections/{project_id}` | GET | Detection results |
+
+### AOI Notes
+
+- AOI GeoJSON supports Polygon/MultiPolygon/Point/MultiPoint.
+- Point AOI is buffered in image CRS (meters). If the image CRS is geographic, buffering is rejected.
+- AOI is reprojected to image CRS for inference, and exported to WGS84 for map display.
 
 ## Project Structure
 

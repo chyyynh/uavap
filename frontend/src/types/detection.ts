@@ -50,6 +50,10 @@ export interface ProcessingLogEntry {
     output_stats?: boolean
     output_pdf?: boolean
     output_geojson?: boolean
+    aoi_geojson_path?: string | null
+    aoi_geojson_file_id?: string | null
+    aoi_points?: number[][] | null
+    aoi_crs?: string | null
   }
   outputs?: string[]
 }
@@ -81,6 +85,25 @@ export interface OrthoBounds {
   south: number
   east: number
   west: number
+}
+
+export interface AoiBounds {
+  minx: number
+  miny: number
+  maxx: number
+  maxy: number
+}
+
+export interface AoiInfo {
+  bbox: AoiBounds
+  bbox_wgs84?: AoiBounds
+  geojson: Record<string, unknown>
+  input_geom_type?: string | null
+  used_geom_type?: string | null
+  buffer_m?: number | null
+  image_crs?: string | null
+  aoi_crs?: string | null
+  assumed_crs?: boolean
 }
 
 export interface TiffMetadata {
