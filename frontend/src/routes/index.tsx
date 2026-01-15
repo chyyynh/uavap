@@ -67,7 +67,24 @@ function Dashboard() {
   const aspectUrl = options.changeEnabled && terrainStatus?.computed
     ? getAspectImageUrl(cacheBust)
     : null
-  const { isRunning, progress, elapsed, steps, currentStep, run, downloadLog } = useProcessing()
+  const {
+    isRunning,
+    progress,
+    elapsed,
+    missionElapsedSec,
+    missionStartTs,
+    missionPaused,
+    missionCompleted,
+    hasAoi,
+    steps,
+    currentStep,
+    run,
+    startMission,
+    pauseMission,
+    resumeMission,
+    resetMission,
+    downloadLog,
+  } = useProcessing()
   const { visibility, toggle, enable } = useLayerVisibility()
   const { exportGeojson, isExporting: isExportingGeojson } = useGeojsonExport(objects, tiffMetadata?.crs)
   const { exportStats, isExporting: isExportingStats } = useStatsExport(objects)
@@ -142,6 +159,15 @@ function Dashboard() {
             steps={steps}
             progress={progress}
             elapsed={elapsed}
+            missionElapsedSec={missionElapsedSec}
+            missionStartTs={missionStartTs}
+            missionPaused={missionPaused}
+            missionCompleted={missionCompleted}
+            hasAoi={hasAoi}
+            onStartMission={startMission}
+            onPauseMission={pauseMission}
+            onResumeMission={resumeMission}
+            onResetMission={resetMission}
             currentStep={currentStep}
           />
           <DetectionSummaryCard objects={objects} />

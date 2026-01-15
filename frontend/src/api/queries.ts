@@ -408,6 +408,7 @@ export interface ProcessingRequest {
   aoi_geojson_file_id?: string | null
   aoi_points?: number[][] | null
   aoi_crs?: string | null
+  mission_start_ts?: string | null
 }
 
 /**
@@ -428,6 +429,11 @@ export interface ProcessingStatusResponse {
   progress: number
   current_step: string
   elapsed_seconds: number
+  mission_start_ts?: string | null
+  processing_started_ts?: string | null
+  analysis_finished_ts?: string | null
+  total_elapsed_sec?: number | null
+  processing_elapsed_sec?: number | null
 }
 
 /**

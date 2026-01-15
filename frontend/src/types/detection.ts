@@ -54,6 +54,7 @@ export interface ProcessingLogEntry {
     aoi_geojson_file_id?: string | null
     aoi_points?: number[][] | null
     aoi_crs?: string | null
+    mission_start_ts?: string | null
   }
   outputs?: string[]
 }

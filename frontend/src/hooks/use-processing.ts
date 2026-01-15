@@ -10,29 +10,137 @@ interface UseProcessingReturn {
   isRunning: boolean
   progress: number
   elapsed: number
+  missionElapsedSec: number
+  missionStartTs: number | null
+  missionPaused: boolean
+  missionCompleted: boolean
+  hasAoi: boolean
   steps: ProcessingStep[]
   currentStep: string
   run: () => void
   reset: () => void
+  startMission: () => void
+  pauseMission: () => void
+  resumeMission: () => void
+  resetMission: () => void
   downloadLog: (projectName?: string) => void
 }
 
 export function useProcessing(): UseProcessingReturn {
+  const MISSION_START_KEY = 'mission_start_ts'
+  const MISSION_STATE_KEY = 'mission_state'
+  const MISSION_ELAPSED_KEY = 'mission_elapsed_sec'
   const queryClient = useQueryClient()
   const { options, fileMode, uploadedFiles, aoiPoints, aoiCrs } = useTaskOptionsContext()
   const [isRunning, setIsRunning] = React.useState(false)
   const [progress, setProgress] = React.useState(0)
   const [elapsed, setElapsed] = React.useState(0)
+  const [missionStartTs, setMissionStartTs] = React.useState<number | null>(null)
+  const [missionPaused, setMissionPaused] = React.useState(false)
+  const [missionCompleted, setMissionCompleted] = React.useState(false)
+  const [missionElapsedSec, setMissionElapsedSec] = React.useState(0)
   const [currentStep, setCurrentStep] = React.useState('')
   const [steps, setSteps] = React.useState<ProcessingStep[]>([])
   const pollingRef = React.useRef<NodeJS.Timeout | null>(null)
   const startTimeRef = React.useRef<number>(0)
   const stepsRef = React.useRef<ProcessingStep[]>([])
+  const stepTimingRef = React.useRef<Record<number, { start: number | null; elapsed: number | null }>>({})
+  const missionPausedAtRef = React.useRef<number | null>(null)
   const logRef = React.useRef<ProcessingLogEntry[]>([])
   const lastLogKeyRef = React.useRef<string>('')
 
   const appendLog = React.useCallback((entry: Omit<ProcessingLogEntry, 'timestamp'>) => {
     logRef.current.push({ ...entry, timestamp: new Date().toISOString() })
+  }, [])
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const stored = localStorage.getItem(MISSION_START_KEY)
+    const storedState = localStorage.getItem(MISSION_STATE_KEY)
+    if (!stored || !storedState) {
+      localStorage.removeItem(MISSION_START_KEY)
+      localStorage.removeItem(MISSION_ELAPSED_KEY)
+      return
+    }
+    const parsed = Number(stored)
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      setMissionStartTs(parsed)
+      if (storedState === 'paused') {
+        setMissionPaused(true)
+      } else if (storedState === 'completed') {
+        setMissionCompleted(true)
+        setMissionPaused(true)
+        const elapsedStored = localStorage.getItem(MISSION_ELAPSED_KEY)
+        if (elapsedStored) {
+          const elapsedNum = Number(elapsedStored)
+          if (!Number.isNaN(elapsedNum)) setMissionElapsedSec(elapsedNum)
+        }
+      }
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (!missionStartTs || missionPaused || missionCompleted) {
+      if (!missionStartTs) setMissionElapsedSec(0)
+      return
+    }
+    const tick = () => setMissionElapsedSec((Date.now() - missionStartTs) / 1000)
+    tick()
+    const timer = setInterval(tick, 1000)
+    return () => clearInterval(timer)
+  }, [missionStartTs, missionPaused, missionCompleted])
+
+  const startMission = React.useCallback(() => {
+    if (missionStartTs && !missionPaused) return
+    const now = Date.now()
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(MISSION_START_KEY, String(now))
+      localStorage.setItem(MISSION_STATE_KEY, 'running')
+      localStorage.removeItem(MISSION_ELAPSED_KEY)
+    }
+    setMissionStartTs(now)
+    setMissionPaused(false)
+    setMissionCompleted(false)
+    missionPausedAtRef.current = null
+  }, [missionStartTs, missionPaused])
+
+  const pauseMission = React.useCallback(() => {
+    if (!missionStartTs || missionPaused) return
+    missionPausedAtRef.current = Date.now()
+    setMissionPaused(true)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(MISSION_STATE_KEY, 'paused')
+    }
+  }, [missionStartTs, missionPaused])
+
+  const resumeMission = React.useCallback(() => {
+    if (!missionStartTs || !missionPaused) return
+    const pausedAt = missionPausedAtRef.current
+    if (pausedAt) {
+      const delta = Date.now() - pausedAt
+      const nextStart = missionStartTs + delta
+      setMissionStartTs(nextStart)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(MISSION_START_KEY, String(nextStart))
+        localStorage.setItem(MISSION_STATE_KEY, 'running')
+      }
+    }
+    missionPausedAtRef.current = null
+    setMissionPaused(false)
+  }, [missionStartTs, missionPaused])
+
+  const resetMission = React.useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(MISSION_START_KEY)
+      localStorage.removeItem(MISSION_STATE_KEY)
+      localStorage.removeItem(MISSION_ELAPSED_KEY)
+    }
+    setMissionStartTs(null)
+    setMissionPaused(false)
+    setMissionCompleted(false)
+    missionPausedAtRef.current = null
+    setElapsed(0)
+    setMissionElapsedSec(0)
   }, [])
 
   const formatTimestamp = (date: Date) => {
@@ -86,23 +194,40 @@ export function useProcessing(): UseProcessingReturn {
         })
       }
 
+      const now = Date.now()
+      const nextSteps = stepsRef.current.map((s, i) => {
+        const totalSteps = Math.max(stepsRef.current.length, 1)
+        const stepIndex = Math.floor((data.progress / 100) * totalSteps)
+        const status =
+          i < stepIndex
+            ? 'done'
+            : i === stepIndex && data.status === 'running'
+              ? 'running'
+              : 'pending'
+        const timing = stepTimingRef.current[s.id] || { start: null, elapsed: null }
+        if (status === 'running' && timing.start == null) {
+          timing.start = now
+          timing.elapsed = 0
+        }
+        if (status === 'done' && timing.elapsed == null) {
+          const start = timing.start ?? now
+          timing.elapsed = Math.max(0, (now - start) / 1000)
+        }
+        if (status === 'running' && timing.start != null) {
+          timing.elapsed = Math.max(0, (now - timing.start) / 1000)
+        }
+        if (status === 'pending') {
+          timing.start = null
+          timing.elapsed = null
+        }
+        stepTimingRef.current[s.id] = timing
+        return { ...s, status, elapsed: timing.elapsed ?? s.elapsed }
+      })
+
       setProgress(data.progress || 0)
       setCurrentStep(data.current_step || '')
-      setElapsed((performance.now() - startTimeRef.current) / 1000)
-
-      const totalSteps = Math.max(stepsRef.current.length, 1)
-      const stepIndex = Math.floor((data.progress / 100) * totalSteps)
-      setSteps((prev) =>
-        prev.map((s, i) => ({
-          ...s,
-          status:
-            i < stepIndex
-              ? 'done'
-              : i === stepIndex && data.status === 'running'
-                ? 'running'
-                : 'pending',
-        }))
-      )
+      setElapsed(data.processing_elapsed_sec ?? data.elapsed_seconds ?? 0)
+      setSteps(nextSteps)
 
       if (data.status === 'done') {
         appendLog({
@@ -115,7 +240,24 @@ export function useProcessing(): UseProcessingReturn {
           ].filter(Boolean) as string[],
         })
         setIsRunning(false)
-        setSteps((prev) => prev.map((s) => ({ ...s, status: 'done' as const })))
+        setMissionCompleted(true)
+        setMissionPaused(true)
+        if (data.total_elapsed_sec !== undefined && data.total_elapsed_sec !== null) {
+          setMissionElapsedSec(data.total_elapsed_sec)
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(MISSION_ELAPSED_KEY, String(data.total_elapsed_sec))
+            localStorage.setItem(MISSION_STATE_KEY, 'completed')
+          }
+        }
+        setSteps((prev) =>
+          prev.map((s) => {
+            const timing = stepTimingRef.current[s.id]
+            if (timing && timing.elapsed == null && timing.start != null) {
+              timing.elapsed = Math.max(0, (Date.now() - timing.start) / 1000)
+            }
+            return { ...s, status: 'done' as const, elapsed: timing?.elapsed ?? s.elapsed }
+          })
+        )
         queryClient.invalidateQueries({ queryKey: ['detections'] })
         queryClient.invalidateQueries({ queryKey: ['projects'] })
         queryClient.invalidateQueries({ queryKey: orthoKeys.bounds })
@@ -149,6 +291,16 @@ export function useProcessing(): UseProcessingReturn {
     const apiUrl = getStoredApiUrl()
     console.log('?? Run clicked, API URL:', apiUrl || '(not connected, using mock)')
     const aoiPayloadCrs = aoiPoints ? aoiCrs : null
+    const missionStartIso = missionStartTs ? new Date(missionStartTs).toISOString() : null
+    const aoiGeojsonPath = fileMode === 'local' && uploadedFiles.aoi?.uploaded ? uploadedFiles.aoi?.name : null
+    const aoiGeojsonFileId = fileMode === 'upload' && uploadedFiles.aoi?.uploaded ? uploadedFiles.aoi?.name : null
+    setMissionCompleted(false)
+    if (missionStartTs) {
+      setMissionPaused(false)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(MISSION_STATE_KEY, 'running')
+      }
+    }
     logRef.current = []
     lastLogKeyRef.current = ''
     appendLog({
@@ -164,10 +316,11 @@ export function useProcessing(): UseProcessingReturn {
         output_stats: options.statsEnabled,
         output_pdf: options.pdfEnabled,
         output_geojson: options.geojsonEnabled,
-        aoi_geojson_path: fileMode === 'local' && uploadedFiles.aoi?.uploaded ? uploadedFiles.aoi?.name : null,
-        aoi_geojson_file_id: fileMode === 'upload' && uploadedFiles.aoi?.uploaded ? uploadedFiles.aoi?.name : null,
+        aoi_geojson_path: aoiGeojsonPath,
+        aoi_geojson_file_id: aoiGeojsonFileId,
         aoi_points: aoiPoints,
         aoi_crs: aoiPayloadCrs,
+        mission_start_ts: missionStartIso,
       },
     })
 
@@ -179,6 +332,8 @@ export function useProcessing(): UseProcessingReturn {
       const nextSteps = buildSteps().map((s) => ({ ...s, status: 'pending' as const }))
       stepsRef.current = nextSteps
       setSteps(nextSteps)
+      stepTimingRef.current = {}
+      setElapsed(0)
 
       const startTime = performance.now()
       const stepDurations = nextSteps.map(() => 0.6)
@@ -198,11 +353,14 @@ export function useProcessing(): UseProcessingReturn {
           return
         }
 
-        setSteps((prev) =>
-          prev.map((s, i) =>
-            i === stepIndex ? { ...s, status: 'running' as const } : s
-          )
-        )
+        setSteps((prev) => {
+          const now = Date.now()
+          return prev.map((s, i) => {
+            if (i !== stepIndex) return s
+            stepTimingRef.current[s.id] = { start: now, elapsed: 0 }
+            return { ...s, status: 'running' as const, elapsed: 0 }
+          })
+        })
         appendLog({ event: 'step_status', status: 'running', step: nextSteps[stepIndex]?.name })
 
         setTimeout(() => {
@@ -249,16 +407,20 @@ export function useProcessing(): UseProcessingReturn {
           output_stats: options.statsEnabled,
           output_pdf: options.pdfEnabled,
           output_geojson: options.geojsonEnabled,
-          aoi_geojson_path: fileMode === 'local' && uploadedFiles.aoi?.uploaded ? uploadedFiles.aoi?.name : null,
-          aoi_geojson_file_id: fileMode === 'upload' && uploadedFiles.aoi?.uploaded ? uploadedFiles.aoi?.name : null,
+          aoi_geojson_path: aoiGeojsonPath,
+          aoi_geojson_file_id: aoiGeojsonFileId,
           aoi_points: aoiPoints,
           aoi_crs: aoiPayloadCrs,
+          mission_start_ts: missionStartIso,
         }),
       })
       const data = await response.json()
       console.log('??? API response:', data)
       if (data?.aoi_mode !== undefined) {
         console.log('[AOI] mode:', data.aoi_mode, 'aoi_crs:', data.aoi_crs, 'image_crs:', data.image_crs)
+      }
+      if (data?.total_elapsed_sec !== undefined && data?.total_elapsed_sec !== null) {
+        setTotalElapsedSec(data.total_elapsed_sec)
       }
 
       if (data.error) {
@@ -275,7 +437,7 @@ export function useProcessing(): UseProcessingReturn {
       appendLog({ event: 'run_error', status: 'error' })
       setIsRunning(false)
     }
-  }, [appendLog, buildSteps, fileMode, isRunning, options.changeEnabled, options.coneEnabled, options.geoEnabled, options.geojsonEnabled, options.pdfEnabled, options.personEnabled, options.statsEnabled, options.vehicleEnabled, pollStatus, uploadedFiles, aoiPoints, aoiCrs])
+  }, [appendLog, buildSteps, fileMode, isRunning, options.changeEnabled, options.coneEnabled, options.geoEnabled, options.geojsonEnabled, options.pdfEnabled, options.personEnabled, options.statsEnabled, options.vehicleEnabled, pollStatus, uploadedFiles, aoiPoints, aoiCrs, missionStartTs])
 
   const reset = React.useCallback(() => {
     if (pollingRef.current) {
@@ -289,6 +451,7 @@ export function useProcessing(): UseProcessingReturn {
     const nextSteps = buildSteps()
     stepsRef.current = nextSteps
     setSteps(nextSteps)
+    stepTimingRef.current = {}
     logRef.current = []
     lastLogKeyRef.current = ''
   }, [buildSteps])
@@ -297,6 +460,7 @@ export function useProcessing(): UseProcessingReturn {
     const nextSteps = buildSteps()
     stepsRef.current = nextSteps
     setSteps(nextSteps)
+    stepTimingRef.current = {}
   }, [buildSteps])
 
   React.useEffect(() => {
@@ -307,5 +471,23 @@ export function useProcessing(): UseProcessingReturn {
     }
   }, [])
 
-  return { isRunning, progress, elapsed, steps, currentStep, run, reset, downloadLog }
+  return {
+    isRunning,
+    progress,
+    elapsed,
+    missionElapsedSec,
+    missionStartTs,
+    missionPaused,
+    missionCompleted,
+    hasAoi: Boolean((aoiPoints && aoiPoints.length) || (fileMode === 'local' && uploadedFiles.aoi?.uploaded) || (fileMode === 'upload' && uploadedFiles.aoi?.uploaded)),
+    steps,
+    currentStep,
+    run,
+    reset,
+    startMission,
+    pauseMission,
+    resumeMission,
+    resetMission,
+    downloadLog,
+  }
 }

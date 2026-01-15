@@ -14,6 +14,15 @@ interface DetectionTaskCardProps {
   steps: ProcessingStep[]
   progress: number
   elapsed: number
+  missionElapsedSec: number
+  missionStartTs: number | null
+  missionPaused: boolean
+  missionCompleted: boolean
+  hasAoi: boolean
+  onStartMission: () => void
+  onPauseMission: () => void
+  onResumeMission: () => void
+  onResetMission: () => void
   currentStep?: string
 }
 
@@ -23,6 +32,15 @@ function DetectionTaskCard({
   steps,
   progress,
   elapsed,
+  missionElapsedSec,
+  missionStartTs,
+  missionPaused,
+  missionCompleted,
+  hasAoi,
+  onStartMission,
+  onPauseMission,
+  onResumeMission,
+  onResetMission,
   currentStep,
 }: DetectionTaskCardProps) {
   return (
@@ -36,6 +54,14 @@ function DetectionTaskCard({
           steps={steps}
           progress={progress}
           elapsed={elapsed}
+          missionElapsedSec={missionElapsedSec}
+          missionStartTs={missionStartTs}
+          missionPaused={missionPaused}
+          missionCompleted={missionCompleted}
+          onStartMission={onStartMission}
+          onPauseMission={onPauseMission}
+          onResumeMission={onResumeMission}
+          onResetMission={onResetMission}
           currentStep={currentStep}
           isRunning={isRunning}
         />
@@ -45,8 +71,13 @@ function DetectionTaskCard({
           disabled={isRunning}
           className="mt-3 w-full rounded-[var(--uav-radius-sm)] bg-[var(--uav-accent)] py-2.5 text-sm font-semibold text-[#151515] hover:bg-[var(--uav-accent)]/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isRunning ? 'RUNNING' : 'RUN'}
+          {isRunning ? 'Processing...' : 'Start Analysis'}
         </Button>
+        <div className="mt-1 text-center text-[11px] text-[var(--uav-text-tertiary)]">
+          {hasAoi
+            ? 'Runs processing within AOI and generates results.'
+            : 'Runs processing on the full scene and generates results.'}
+        </div>
     </DashboardCard>
   )
 }

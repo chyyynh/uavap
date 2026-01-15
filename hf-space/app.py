@@ -8,7 +8,7 @@ import os
 import shutil
 import io
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 import numpy as np
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -181,7 +181,21 @@ models_cache = {"loaded": False, "models": {}}
 upernet_cache = {"loaded": False, "model": None}
 landcover_cache = {"mask": None, "stats": None, "computed": False}
 terrain_cache = {"stats": None, "computed": False}
-processing_state = {"job_id": None, "status": "idle", "progress": 0, "current_step": "", "elapsed_seconds": 0, "results": [], "start_time": None}
+processing_state = {
+    "job_id": None,
+    "status": "idle",
+    "progress": 0,
+    "current_step": "",
+    "elapsed_seconds": 0,
+    "results": [],
+    "start_time": None,
+    "mission_start_ts": None,
+    "mission_start_epoch": None,
+    "processing_started_ts": None,
+    "processing_started_epoch": None,
+    "analysis_finished_ts": None,
+    "analysis_finished_epoch": None,
+}
 
 
 def cleanup_all():
@@ -224,6 +238,14 @@ def cleanup_all():
     landcover_cache.update({"mask": None, "stats": None, "computed": False})
     terrain_cache.update({"stats": None, "computed": False})
     processing_state.update({"job_id": None, "status": "idle", "progress": 0, "current_step": "", "elapsed_seconds": 0, "results": [], "start_time": None})
+    processing_state.update({
+        "mission_start_ts": None,
+        "mission_start_epoch": None,
+        "processing_started_ts": None,
+        "processing_started_epoch": None,
+        "analysis_finished_ts": None,
+        "analysis_finished_epoch": None,
+    })
 
     print("[Cleanup] All caches cleared")
 
@@ -242,6 +264,7 @@ class ProcessingRequest(BaseModel):
     aoi_geojson_file_id: str | None = None
     aoi_points: list[list[float]] | None = None
     aoi_crs: str | None = None
+    mission_start_ts: str | None = None
 class LocalUploadRequest(BaseModel):
     project_dir: str | None = None
     ortho_name: str | None = None
@@ -1318,6 +1341,31 @@ def _clear_aoi_cache():
     uploaded_files["aoi"] = None
 
 
+def _parse_mission_start_ts(raw_value: str | None) -> tuple[str | None, float | None]:
+    if not raw_value:
+        return None, None
+    value = raw_value.strip()
+    if not value:
+        return None, None
+
+    try:
+        num = float(value)
+        if num > 1e11:
+            return raw_value, num / 1000.0
+        return raw_value, num
+    except Exception:
+        pass
+
+    try:
+        iso_value = value[:-1] + "+00:00" if value.endswith("Z") else value
+        parsed = datetime.fromisoformat(iso_value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return raw_value, parsed.timestamp()
+    except Exception:
+        return None, None
+
+
 def load_aoi_as_polygon(
     aoi_geojson_path: str,
     image_path: str,
@@ -1598,12 +1646,22 @@ async def start_processing(request: ProcessingRequest = None):
         except Exception:
             pass
 
+    mission_start_raw, mission_start_epoch = _parse_mission_start_ts(request.mission_start_ts)
+    processing_started_epoch = time.time()
+    processing_started_ts = datetime.now(timezone.utc).isoformat()
+
     job_id = f"job_{int(time.time())}"
     processing_state["job_id"] = job_id
     processing_state["status"] = "pending"
     processing_state["progress"] = 0
     processing_state["start_time"] = time.time()
     processing_state["results"] = []
+    processing_state["mission_start_ts"] = mission_start_raw
+    processing_state["mission_start_epoch"] = mission_start_epoch
+    processing_state["processing_started_ts"] = processing_started_ts
+    processing_state["processing_started_epoch"] = processing_started_epoch
+    processing_state["analysis_finished_ts"] = None
+    processing_state["analysis_finished_epoch"] = None
 
     def update_progress(progress, step):
         processing_state["progress"] = progress
@@ -1649,6 +1707,8 @@ async def start_processing(request: ProcessingRequest = None):
 
             processing_state["results"] = detections
             processing_state["status"] = "done"
+            processing_state["analysis_finished_epoch"] = time.time()
+            processing_state["analysis_finished_ts"] = datetime.now(timezone.utc).isoformat()
             update_progress(100, "Complete")
         except Exception as e:
             processing_state["status"] = "error"
@@ -1657,6 +1717,14 @@ async def start_processing(request: ProcessingRequest = None):
             traceback.print_exc()
 
     threading.Thread(target=run, daemon=True).start()
+    analysis_finished_epoch = processing_state.get("analysis_finished_epoch")
+    total_elapsed_sec = None
+    processing_elapsed_sec = None
+    if analysis_finished_epoch and processing_state.get("processing_started_epoch"):
+        processing_elapsed_sec = analysis_finished_epoch - processing_state["processing_started_epoch"]
+        if processing_state.get("mission_start_epoch"):
+            total_elapsed_sec = analysis_finished_epoch - processing_state["mission_start_epoch"]
+
     return {
         "job_id": job_id,
         "status": "started",
@@ -1671,18 +1739,35 @@ async def start_processing(request: ProcessingRequest = None):
         "image_crs": aoi_cache.get("image_crs"),
         "aoi_crs": aoi_cache.get("crs"),
         "aoi_assumed_crs": aoi_cache.get("assumed_crs"),
+        "mission_start_ts": processing_state.get("mission_start_ts"),
+        "processing_started_ts": processing_state.get("processing_started_ts"),
+        "analysis_finished_ts": processing_state.get("analysis_finished_ts"),
+        "total_elapsed_sec": total_elapsed_sec,
+        "processing_elapsed_sec": processing_elapsed_sec,
     }
 
 
 @app.get("/api/process/status")
 async def get_current_processing_status():
     """取得目前處理狀態（不需要 job_id）"""
+    analysis_finished_epoch = processing_state.get("analysis_finished_epoch")
+    processing_elapsed_sec = None
+    total_elapsed_sec = None
+    if analysis_finished_epoch and processing_state.get("processing_started_epoch"):
+        processing_elapsed_sec = analysis_finished_epoch - processing_state["processing_started_epoch"]
+        if processing_state.get("mission_start_epoch"):
+            total_elapsed_sec = analysis_finished_epoch - processing_state["mission_start_epoch"]
     return {
         "job_id": processing_state["job_id"],
         "status": processing_state["status"],
         "progress": processing_state["progress"],
         "current_step": processing_state["current_step"],
         "elapsed_seconds": time.time() - processing_state["start_time"] if processing_state["start_time"] else 0,
+        "mission_start_ts": processing_state.get("mission_start_ts"),
+        "processing_started_ts": processing_state.get("processing_started_ts"),
+        "analysis_finished_ts": processing_state.get("analysis_finished_ts"),
+        "total_elapsed_sec": total_elapsed_sec,
+        "processing_elapsed_sec": processing_elapsed_sec,
     }
 
 
@@ -1690,12 +1775,24 @@ async def get_current_processing_status():
 async def get_processing_status(job_id: str):
     if processing_state["job_id"] != job_id:
         raise HTTPException(status_code=404, detail="Job not found")
+    analysis_finished_epoch = processing_state.get("analysis_finished_epoch")
+    processing_elapsed_sec = None
+    total_elapsed_sec = None
+    if analysis_finished_epoch and processing_state.get("processing_started_epoch"):
+        processing_elapsed_sec = analysis_finished_epoch - processing_state["processing_started_epoch"]
+        if processing_state.get("mission_start_epoch"):
+            total_elapsed_sec = analysis_finished_epoch - processing_state["mission_start_epoch"]
     return {
         "job_id": job_id,
         "status": processing_state["status"],
         "progress": processing_state["progress"],
         "current_step": processing_state["current_step"],
         "elapsed_seconds": time.time() - processing_state["start_time"] if processing_state["start_time"] else 0,
+        "mission_start_ts": processing_state.get("mission_start_ts"),
+        "processing_started_ts": processing_state.get("processing_started_ts"),
+        "analysis_finished_ts": processing_state.get("analysis_finished_ts"),
+        "total_elapsed_sec": total_elapsed_sec,
+        "processing_elapsed_sec": processing_elapsed_sec,
     }
 
 
